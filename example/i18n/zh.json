@@ -1,4 +1,10 @@
 {
   "name": "名字",
-  "job": "工作"
+  "job": "工作",
+  "nest": {
+    "object": {
+      "example1": "範例1",
+      "example2": "範例2"
+    }
+  }
 }

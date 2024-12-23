@@ -1,0 +1,21 @@
+{
+  "name": "google-sheet-languages-model",
+  "version": "0.3.0",
+  "exports": "./src/index.ts",
+  "tasks": {
+    "dev": "deno task --eval \"pnpm dev\"",
+    "build": "deno task --eval \"pnpm build\"",
+    "test": "deno task --eval \"pnpm test\""
+  },
+  "license": "MIT",
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1"
+  },
+  "fmt": {
+    "semiColons": false,
+    "singleQuote": true,
+    "useTabs": false,
+    "indentWidth": 2,
+    "exclude": ["example/i18n"]
+  }
+}

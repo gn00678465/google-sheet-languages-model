@@ -1,6 +1,7 @@
 node_modules
 dist
-credentials.json
+**/credentials.json
 *.log
-.env
+**/.env
 tmp
+.tsup

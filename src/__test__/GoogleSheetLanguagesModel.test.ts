@@ -1,94 +1,95 @@
-import { describe, test, expect, vi } from "vitest";
-import { GoogleSheetLanguagesModel } from "../GoogleSheetLanguagesModel.ts";
-import { LanguagesModel } from "../LanguagesModel.ts";
+import { describe, expect, test, vi } from 'vitest'
+import { GoogleSheetLanguagesModel } from '../GoogleSheetLanguagesModel.ts'
+import { LanguagesModel } from '../LanguagesModel.ts'
 import {
-  languages,
-  flatLanguagesContentExample,
   expectLanguagesModel,
-} from "./helper.ts";
+  flatLanguagesContentExample,
+  languages,
+} from './helper.ts'
 
 const sheetValueExample = [
-  ["key", "en", "fr", "es"],
-  ["name", "name", "nom", "nombre"],
-  ["job", "job", "emploi", "trabajo"],
-  ["nest.object.example1", "example1", "", ""],
-  ["nest.object.example2", "example2", "", ""],
-];
+  ['key', 'en', 'fr', 'es'],
+  ['name', 'name', 'nom', 'nombre'],
+  ['job', 'job', 'emploi', 'trabajo'],
+  ['nest.object.example1', 'example1', '', ''],
+  ['nest.object.example2', 'example2', '', ''],
+]
 
-describe("GoogleSheetLanguagesModel.test", () => {
-  test("sheetValueToLanguageModel", () => {
+describe('GoogleSheetLanguagesModel.test', () => {
+  test('sheetValueToLanguageModel', () => {
     const googleSheetLanguagesModel = new GoogleSheetLanguagesModel({
-      sheetId: "",
+      sheetId: '',
       auth: {} as any,
-    });
+    })
 
     const languagesModel = googleSheetLanguagesModel.sheetValueToLanguageModel(
       sheetValueExample,
-      languages
-    );
+      languages,
+    )
 
-    expectLanguagesModel(languagesModel);
-  });
+    expectLanguagesModel(languagesModel)
+  })
 
-  test("languagesModelToSheetValue", () => {
+  test('languagesModelToSheetValue', () => {
     const googleSheetLanguagesModel = new GoogleSheetLanguagesModel({
-      sheetId: "",
+      sheetId: '',
       auth: {} as any,
-    });
+    })
 
     const languagesModel = new LanguagesModel({
       languagesContent: flatLanguagesContentExample,
       languages,
-    });
+    })
 
-    const sheetValue =
-      googleSheetLanguagesModel.languagesModelToSheetValue(languagesModel);
+    const sheetValue = googleSheetLanguagesModel.languagesModelToSheetValue(
+      languagesModel,
+    )
 
-    expect(sheetValue).toStrictEqual(sheetValueExample);
-  });
+    expect(sheetValue).toStrictEqual(sheetValueExample)
+  })
 
-  test("load languages from google sheet and create the right model", async () => {
+  test('load languages from google sheet and create the right model', async () => {
     const googleSheetLanguagesModel = new GoogleSheetLanguagesModel({
-      sheetId: "",
+      sheetId: '',
       auth: {} as any,
-    });
+    })
 
     const spy = vi
-      .spyOn(googleSheetLanguagesModel, "getSheetValueFromGoogleSheet")
-      .mockResolvedValue(sheetValueExample);
+      .spyOn(googleSheetLanguagesModel, 'getSheetValueFromGoogleSheet')
+      .mockResolvedValue(sheetValueExample)
 
     const args: Parameters<
       typeof googleSheetLanguagesModel.loadFromGoogleSheet
-    > = ["sheetTitle", languages];
+    > = ['sheetTitle', languages]
 
     const languagesModel = await googleSheetLanguagesModel.loadFromGoogleSheet(
-      ...args
-    );
+      ...args,
+    )
 
-    expect(spy).toHaveBeenCalledWith(args[0]);
-    expectLanguagesModel(languagesModel);
-  });
+    expect(spy).toHaveBeenCalledWith(args[0])
+    expectLanguagesModel(languagesModel)
+  })
 
-  test("save languages to google sheet", async () => {
+  test('save languages to google sheet', async () => {
     const googleSheetLanguagesModel = new GoogleSheetLanguagesModel({
-      sheetId: "",
+      sheetId: '',
       auth: {} as any,
-    });
+    })
 
     const spy = vi
-      .spyOn(googleSheetLanguagesModel, "updateSheetValueToGoogleSheet")
-      .mockResolvedValue(undefined);
+      .spyOn(googleSheetLanguagesModel, 'updateSheetValueToGoogleSheet')
+      .mockResolvedValue(undefined)
 
     const languagesModel = new LanguagesModel({
       languagesContent: flatLanguagesContentExample,
       languages,
-    });
+    })
 
     const args: Parameters<typeof googleSheetLanguagesModel.saveToGoogleSheet> =
-      ["sheetTitle", languagesModel];
+      ['sheetTitle', languagesModel]
 
-    await googleSheetLanguagesModel.saveToGoogleSheet(...args);
+    await googleSheetLanguagesModel.saveToGoogleSheet(...args)
 
-    expect(spy).toHaveBeenCalledWith(args[0], sheetValueExample);
-  });
-});
+    expect(spy).toHaveBeenCalledWith(args[0], sheetValueExample)
+  })
+})
