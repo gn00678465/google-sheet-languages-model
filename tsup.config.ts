@@ -9,14 +9,10 @@ export default defineConfig((options) => {
       '!example',
     ],
     clean: true,
-    format: ['esm'],
+    format: ['esm', 'cjs'],
     minify: !options.watch,
     sourcemap: true,
     dts: true,
-    outExtension({ format }) {
-      return {
-        js: `.${format}.js`,
-      }
-    },
+    shims: true,
   }
 })

@@ -1,7 +1,6 @@
 {
   "name": "google-sheet-languages-model",
-  "version": "0.3.0",
-  "main": "dist/index.js",
+  "version": "0.3.1",
   "repository": "https://github.com/neil585456525/i18n-google-sheet-example.git",
   "author": "neil585456525 <neil585456525@gmail.com>",
   "type": "module",
@@ -13,6 +12,16 @@
     "javascript",
     "typescript"
   ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "test": "vitest",
     "dev": "tsup --watch",
