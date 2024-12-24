@@ -95,9 +95,9 @@ Your `config.ts` should export the following variables:
 ### Examples
 
 - Pull i18n from google sheet to local folder.
-  ([link](https://github.com/neil585456525/i18n-google-sheet-example/blob/main/example/pull.ts))
+  ([link](https://github.com/gn00678465/google-sheet-languages-model/blob/main/example/pull.ts))
 - Push i18n from local folder to google sheet.
-  ([link](https://github.com/neil585456525/i18n-google-sheet-example/blob/main/example/push.ts))
+  ([link](https://github.com/gn00678465/google-sheet-languages-model/blob/main/example/push.ts))
 
 ## Documentation
 
