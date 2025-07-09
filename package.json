@@ -1,6 +1,6 @@
 {
   "name": "google-sheet-languages-model",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "repository": "https://github.com/neil585456525/i18n-google-sheet-example.git",
   "author": "neil585456525 <neil585456525@gmail.com>",
   "type": "module",
@@ -31,7 +31,7 @@
     "i18n:pull:flat": "tsx example/pull.ts --type=flat"
   },
   "dependencies": {
-    "googleapis": "^144.0.0",
+    "googleapis": "^150.0.1",
     "lodash-es": "^4.17.21"
   },
   "devDependencies": {
