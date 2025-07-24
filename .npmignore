@@ -1,7 +1,8 @@
 /src/
 /example/
-rollup.config.mjs
 .env
 env
 *.log
 tsconfig*
+tsdown.config.ts
+deno*
