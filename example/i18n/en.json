@@ -3,8 +3,8 @@
   "job": "job",
   "nest": {
     "object": {
-      "example1": "example1",
-      "example2": "example2"
+      "example1": "example 1",
+      "example2": "example 2"
     }
   }
 }
