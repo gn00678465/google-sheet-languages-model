@@ -1,6 +1,6 @@
 import { describe, test } from 'vitest'
 import { LanguagesModel } from '../LanguagesModel.ts'
-import { resolve } from 'path'
+import { resolve } from 'node:path'
 import {
   __dirname,
   expectLanguagesModel,

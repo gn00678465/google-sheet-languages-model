@@ -1,8 +1,7 @@
-import {
-  GoogleSheetLanguagesModel,
-  type LanguagesContentType,
-} from '../src/index.ts'
+import type { LanguagesContentType } from '../dist/index.d.ts' // Ensure types are loaded
+import { GoogleSheetLanguagesModel } from '../dist/index.js'
 import { auth, folderPath, languages, SHEET_ID } from './config.ts'
+import process from "node:process"
 
 const googleSheetLanguagesModel = new GoogleSheetLanguagesModel({
   sheetId: SHEET_ID,

@@ -1,4 +1,4 @@
-import { defineConfig } from 'tsup'
+import { defineConfig } from 'tsdown'
 
 export default defineConfig((options) => {
   return {
@@ -10,6 +10,8 @@ export default defineConfig((options) => {
     ],
     clean: true,
     format: ['esm', 'cjs'],
+    external: ['googleapis'],
+    noExternal: ['lodash-es'],
     minify: !options.watch,
     sourcemap: true,
     dts: true,
