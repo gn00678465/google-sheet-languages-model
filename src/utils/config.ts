@@ -41,6 +41,13 @@ export async function loadConfig(
     // Support both default export and named exports
     const config: CLIConfig = module.default || module
 
+    // Validate that we have a valid configuration object
+    if (!config || (typeof config === 'object' && Object.keys(config).length === 0)) {
+      throw new Error(
+        `Config file ${absolutePath} has no valid exports. Please ensure it exports a configuration object (default export or named exports).`
+      )
+    }
+
     return config
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
@@ -53,10 +60,6 @@ export async function loadConfig(
     } else if (errorMessage.includes('Cannot find module')) {
       throw new Error(
         `Failed to load config file - missing dependency in ${absolutePath}:\n${errorMessage}`
-      )
-    } else if (!module || (typeof module === 'object' && Object.keys(module).length === 0)) {
-      throw new Error(
-        `Config file ${absolutePath} has no exports. Please ensure it exports a configuration object (default export or named exports).`
       )
     } else {
       throw new Error(
