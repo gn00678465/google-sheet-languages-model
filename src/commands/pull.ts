@@ -12,7 +12,7 @@ import {
   validateDirectory,
   validateFile,
 } from '../utils/validator.ts'
-import { loadConfig, mergeConfig } from '../utils/config.ts'
+import { loadAndMergeConfig } from '../utils/config.ts'
 
 interface PullCommandArgs {
   config?: string
@@ -92,18 +92,11 @@ export const command: CommandModule = {
       // Load and merge config if config file is provided
       if (args.config) {
         logger.info(`Loading config from: ${args.config}`)
-        const configData = await loadConfig(args.config)
-        
-        // Only use CLI args that were explicitly provided (not from yargs defaults)
-        const explicitArgs: Partial<PullCommandArgs> = {}
-        if ('sheetId' in argv) explicitArgs.sheetId = args.sheetId
-        if ('sheetTitle' in argv) explicitArgs.sheetTitle = args.sheetTitle
-        if ('credentials' in argv) explicitArgs.credentials = args.credentials
-        if ('languages' in argv) explicitArgs.languages = args.languages
-        if ('type' in argv) explicitArgs.type = args.type
-        if ('directory' in argv) explicitArgs.directory = args.directory
-        
-        args = mergeConfig(configData, explicitArgs) as PullCommandArgs
+        args = await loadAndMergeConfig<PullCommandArgs>(
+          args.config,
+          argv,
+          ['sheetId', 'sheetTitle', 'credentials', 'languages', 'type', 'directory']
+        )
         logger.success('Config loaded successfully')
       }
 

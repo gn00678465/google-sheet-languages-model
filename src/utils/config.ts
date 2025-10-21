@@ -65,3 +65,36 @@ export function mergeConfig(
     directory: args.directory ?? config.directory,
   }
 }
+
+/**
+ * Extract explicitly provided CLI arguments (ignore yargs defaults)
+ * Only returns arguments that were actually provided by the user
+ */
+export function extractExplicitArgs(
+  argv: Record<string, unknown>,
+  keys: string[]
+): Record<string, unknown> {
+  const explicitArgs: Record<string, unknown> = {}
+  
+  for (const key of keys) {
+    if (key in argv) {
+      explicitArgs[key] = argv[key]
+    }
+  }
+  
+  return explicitArgs
+}
+
+/**
+ * Load config file and merge with CLI arguments
+ * Returns merged configuration with CLI args taking precedence
+ */
+export async function loadAndMergeConfig<T extends CLIConfig>(
+  configPath: string,
+  argv: Record<string, unknown>,
+  argKeys: string[]
+): Promise<T> {
+  const configData = await loadConfig(configPath)
+  const explicitArgs = extractExplicitArgs(argv, argKeys)
+  return mergeConfig(configData, explicitArgs) as T
+}
