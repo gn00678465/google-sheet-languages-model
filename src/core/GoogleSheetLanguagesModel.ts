@@ -1,5 +1,5 @@
-import { LanguagesModel } from './LanguagesModel.ts'
-import type { FlatLanguagesContent, Languages } from './LanguagesModel.ts'
+import { LanguagesModel } from '../core/LanguagesModel.ts'
+import type { FlatLanguagesContent, Languages } from '../core/LanguagesModel.ts'
 import { google } from 'googleapis'
 
 type SheetValue = string[][]

@@ -1,0 +1,3 @@
+[submodule ".github/copilot-common"]
+	path = .github/copilot-common
+	url = https://github.com/gn00678465/vscode-copilot-prompts.git

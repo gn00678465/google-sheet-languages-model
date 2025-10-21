@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
-import { GoogleSheetLanguagesModel } from '../GoogleSheetLanguagesModel.ts'
-import { LanguagesModel } from '../LanguagesModel.ts'
+import { GoogleSheetLanguagesModel } from '../core/GoogleSheetLanguagesModel.ts'
+import { LanguagesModel } from '../core/LanguagesModel.ts'
 import {
   expectLanguagesModel,
   flatLanguagesContentExample,

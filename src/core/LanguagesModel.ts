@@ -1,7 +1,7 @@
 import { set } from 'lodash-es'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
-import type { LanguagesContentType } from './types.ts'
+import type { LanguagesContentType } from '../types.ts'
 
 const require = createRequire(import.meta.url)
 
