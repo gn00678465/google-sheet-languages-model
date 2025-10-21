@@ -16,7 +16,7 @@ npx gslm pull \
   --sheet-title "Sheet1" \
   --credentials ./credentials.json \
   --directory ./i18n \
-  --languages en,es,fr
+  --languages en es fr
 
 # 3. Push i18n data to Google Sheet
 npx gslm push \
@@ -24,7 +24,7 @@ npx gslm push \
   --sheet-title "Sheet1" \
   --credentials ./credentials.json \
   --directory ./i18n \
-  --languages en,es,fr
+  --languages en es fr
 ```
 
 ## Installation
