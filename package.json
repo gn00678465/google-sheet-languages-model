@@ -26,9 +26,6 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "scripts-info": {
-    "test": "The 'test' script now runs tests once and exits (using 'vitest run'). If you want watch mode, use 'pnpm test:watch'. This changes the default behavior; previously, 'pnpm test' may have run in watch mode."
-  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
