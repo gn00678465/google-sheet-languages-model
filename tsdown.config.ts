@@ -2,15 +2,13 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig((options) => {
   return {
-    entry: [
-      'src/index.ts',
-      '!src/**/__tests__/**',
-      '!src/**/*.test.*',
-      '!example',
-    ],
+    entry: {
+      index: 'src/index.ts',
+      cli: 'src/cli.ts',
+    },
     clean: true,
     format: ['esm', 'cjs'],
-    external: ['googleapis'],
+    external: ['googleapis', 'yargs'],
     noExternal: ['lodash-es'],
     minify: !options.watch,
     sourcemap: true,

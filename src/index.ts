@@ -1,3 +1,3 @@
-export * from './GoogleSheetLanguagesModel.ts'
-export * from './LanguagesModel.ts'
+export * from './core/GoogleSheetLanguagesModel.ts'
+export * from './core/LanguagesModel.ts'
 export * from './types.ts'

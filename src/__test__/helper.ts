@@ -3,7 +3,7 @@ import {
   FlatLanguagesContent,
   LanguagesModel,
   NestLanguagesContent,
-} from '../LanguagesModel.ts'
+} from '../core/LanguagesModel.ts'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 

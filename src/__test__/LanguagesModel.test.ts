@@ -1,5 +1,5 @@
 import { describe, test } from 'vitest'
-import { LanguagesModel } from '../LanguagesModel.ts'
+import { LanguagesModel } from '../core/LanguagesModel.ts'
 import { resolve } from 'node:path'
 import {
   __dirname,
