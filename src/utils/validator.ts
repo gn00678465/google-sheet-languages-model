@@ -50,7 +50,7 @@ export function validateLanguageCodes(languages: string[]): boolean {
     return false
   }
 
-  const langRegex = /^[a-z]{2,3}(-[A-Z]{2})?$/
+  const langRegex = /^[a-z]{2,3}(-[A-Z][a-z]{3})?(-[A-Z]{2})?$/
   return languages.every((lang) => langRegex.test(lang))
 }
 

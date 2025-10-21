@@ -54,7 +54,6 @@ export function validateCredentials(credentials: unknown): boolean {
   if (!credentials || typeof credentials !== 'object') {
     return false
   }
-  
   const creds = credentials as Record<string, unknown>
 
   // Check for service account credentials

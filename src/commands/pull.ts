@@ -181,7 +181,7 @@ export const command: CommandModule = {
 
       // Save to local files
       logger.info('Saving translations to local files...')
-      languagesModel.saveToFolder(directoryPath, args.type || 'nest')
+      languagesModel.saveToFolder(directoryPath, args.type)
 
       const duration = Date.now() - startTime
       logger.completeCommand('pull', duration)
