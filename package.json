@@ -1,6 +1,6 @@
 {
   "name": "google-sheet-languages-model",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "repository": "https://github.com/neil585456525/i18n-google-sheet-example.git",
   "author": "neil585456525 <neil585456525@gmail.com>",
   "type": "module",
@@ -10,8 +10,12 @@
     "google-sheet",
     "google-sheet-i18n",
     "javascript",
-    "typescript"
+    "typescript",
+    "cli"
   ],
+  "bin": {
+    "gslm": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -27,14 +31,19 @@
     "test:watch": "vitest",
     "dev": "tsdown --watch",
     "build": "tsdown",
-    "i18n:push": "tsx example/push.ts",
-    "i18n:pull:nest": "tsx example/pull.ts --type=nest",
-    "i18n:pull:flat": "tsx example/pull.ts --type=flat"
+    "example:api:push": "tsx example/push.ts",
+    "example:api:pull:nest": "tsx example/pull.ts --type=nest",
+    "example:api:pull:flat": "tsx example/pull.ts --type=flat",
+    "example:cli:pull": "node dist/cli.js pull --config example/gslm.config.js",
+    "example:cli:push": "node dist/cli.js push --config example/gslm.config.js",
+    "example:cli2:pull": "node dist/cli.js pull --config example/gslm.config.with-credentials-object.js",
+    "example:cli2:push": "node dist/cli.js push --config example/gslm.config.with-credentials-object.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "googleapis": "^150.0.1",
+    "googleapis": "^164.1.0",
     "lodash-es": "^4.17.21",
-    "yargs": "^18.0.0"
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
     "@types/lodash-es": "^4.17.12",
@@ -45,9 +54,6 @@
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
-  },
-  "peerDependencies": {
-    "googleapis": "^150.0.1"
   },
   "packageManager": "pnpm@9.12.3+sha512.cce0f9de9c5a7c95bef944169cc5dfe8741abfb145078c0d508b868056848a87c81e626246cb60967cbd7fd29a6c062ef73ff840d96b3c86c40ac92cf4a813ee"
 }
