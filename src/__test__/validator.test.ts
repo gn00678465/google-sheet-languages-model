@@ -135,12 +135,9 @@ describe('validator', () => {
     })
 
     it('should return false for non-array input', () => {
-      // @ts-expect-error: Testing invalid input type
-      expect(validateLanguageCodes(null)).toBe(false)
-      // @ts-expect-error: Testing invalid input type
-      expect(validateLanguageCodes(undefined)).toBe(false)
-      // @ts-expect-error: Testing invalid input type
-      expect(validateLanguageCodes('en')).toBe(false)
+      expect(validateLanguageCodes(null as unknown as string[])).toBe(false)
+      expect(validateLanguageCodes(undefined as unknown as string[])).toBe(false)
+      expect(validateLanguageCodes('en' as unknown as string[])).toBe(false)
     })
 
     it('should return false if any language code is invalid', () => {
@@ -160,10 +157,8 @@ describe('validator', () => {
       expect(validateContentType('NEST')).toBe(false)
       expect(validateContentType('FLAT')).toBe(false)
       expect(validateContentType('')).toBe(false)
-      // @ts-expect-error: Testing invalid input type
-      expect(validateContentType(null)).toBe(false)
-      // @ts-expect-error: Testing invalid input type
-      expect(validateContentType(undefined)).toBe(false)
+      expect(validateContentType(null as unknown as string)).toBe(false)
+      expect(validateContentType(undefined as unknown as string)).toBe(false)
     })
 
     it('should provide type guard functionality', () => {
