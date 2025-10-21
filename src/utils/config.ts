@@ -42,7 +42,7 @@ export async function loadConfig(
     const config: CLIConfig = module.default || module
 
     // Validate that we have a valid configuration object
-    if (!config || (typeof config === 'object' && Object.keys(config).length === 0)) {
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
       throw new Error(
         `Config file ${absolutePath} has no valid exports. Please ensure it exports a configuration object (default export or named exports).`
       )
