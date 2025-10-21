@@ -43,9 +43,26 @@ export async function loadConfig(
 
     return config
   } catch (error) {
-    throw new Error(
-      `Failed to load config file: ${error instanceof Error ? error.message : String(error)}`
-    )
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    
+    // Provide more specific error context based on error type
+    if (errorMessage.includes('SyntaxError')) {
+      throw new Error(
+        `Failed to load config file due to syntax error in ${absolutePath}:\n${errorMessage}`
+      )
+    } else if (errorMessage.includes('Cannot find module')) {
+      throw new Error(
+        `Failed to load config file - missing dependency in ${absolutePath}:\n${errorMessage}`
+      )
+    } else if (!module || (typeof module === 'object' && Object.keys(module).length === 0)) {
+      throw new Error(
+        `Config file ${absolutePath} has no exports. Please ensure it exports a configuration object (default export or named exports).`
+      )
+    } else {
+      throw new Error(
+        `Failed to load config file ${absolutePath}:\n${errorMessage}\n\nPlease ensure the file is a valid JavaScript/TypeScript module with proper exports.`
+      )
+    }
   }
 }
 
