@@ -29,16 +29,26 @@ npx gslm push \
 
 ## Installation
 
+### From GitHub Package Registry
+
+```bash
+# Configure npm to use GitHub Package Registry for @gn00678465 scope
+echo "@gn00678465:registry=https://npm.pkg.github.com" >> .npmrc
+
+# Install the package
+pnpm add -D @gn00678465/google-sheet-languages-model
+```
+
 ### For CLI Usage (Recommended)
 
 Install the package globally or as a dev dependency:
 
 ```bash
 # Global installation
-npm install -g google-sheet-languages-model
+npm install -g @gn00678465/google-sheet-languages-model
 
 # Or as dev dependency
-pnpm add -D google-sheet-languages-model
+pnpm add -D @gn00678465/google-sheet-languages-model
 ```
 
 ### For Programmatic API Usage
@@ -429,6 +439,40 @@ languagesModel.saveToFolder(folderPath, 'flat')
 
 This flexibility allows you to work with the i18n data in a way that's most
 convenient and logical for your project's organization.
+
+## Release Process
+
+This package uses automated versioning and publishing:
+
+1. **Make changes** following [Conventional Commits](https://www.conventionalcommits.org/)
+2. **Run release script**:
+   ```bash
+   # For patch version (0.5.0 -> 0.5.1)
+   pnpm release
+
+   # For minor version (0.5.0 -> 0.6.0)
+   pnpm release:minor
+
+   # For major version (0.5.0 -> 1.0.0)
+   pnpm release:major
+   ```
+3. **Automated workflow** publishes to GitHub Package Registry
+4. **GitHub Release** is created automatically with changelog
+
+### Commit Message Format
+
+Follow Conventional Commits specification:
+
+- `feat:` - New features (triggers minor version bump)
+- `fix:` - Bug fixes (triggers patch version bump)
+- `docs:` - Documentation changes
+- `refactor:` - Code refactoring
+- `test:` - Adding or updating tests
+- `chore:` - Maintenance tasks
+- `build:` - Build system changes
+- `ci:` - CI/CD changes
+
+Example: `feat(cli): add support for environment variables`
 
 ## Contributing
 

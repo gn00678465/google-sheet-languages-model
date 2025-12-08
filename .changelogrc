@@ -1,0 +1,17 @@
+{
+  "types": {
+    "feat": { "title": "🚀 Features", "semver": "minor" },
+    "fix": { "title": "🐛 Bug Fixes", "semver": "patch" },
+    "perf": { "title": "⚡ Performance Improvements", "semver": "patch" },
+    "refactor": { "title": "♻️ Refactors", "semver": "patch" },
+    "docs": { "title": "📚 Documentation", "semver": "patch" },
+    "build": { "title": "📦 Build System", "semver": "patch" },
+    "test": { "title": "🧪 Tests", "semver": "patch" },
+    "chore": { "title": "🏗️ Chores", "semver": "patch" },
+    "ci": { "title": "🤖 CI/CD", "semver": "patch" }
+  },
+  "scopeTypos": {},
+  "github": {
+    "repo": "gn00678465/google-sheet-languages-model"
+  }
+}

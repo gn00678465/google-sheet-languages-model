@@ -1,8 +1,15 @@
 {
-  "name": "google-sheet-languages-model",
+  "name": "@gn00678465/google-sheet-languages-model",
   "version": "0.5.0",
-  "repository": "https://github.com/neil585456525/i18n-google-sheet-example.git",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gn00678465/google-sheet-languages-model.git"
+  },
   "author": "neil585456525 <neil585456525@gmail.com>",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -38,7 +45,11 @@
     "example:cli:push": "node dist/cli.js push --config example/gslm.config.js",
     "example:cli2:pull": "node dist/cli.js pull --config example/gslm.config.with-credentials-object.js",
     "example:cli2:push": "node dist/cli.js push --config example/gslm.config.with-credentials-object.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "release": "bumpp",
+    "release:minor": "bumpp minor",
+    "release:major": "bumpp major",
+    "changelog": "changelogen --output CHANGELOG.md"
   },
   "dependencies": {
     "googleapis": "^164.1.0",
@@ -49,6 +60,8 @@
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^24.9.1",
     "@types/yargs": "^17.0.33",
+    "bumpp": "^10.3.2",
+    "changelogen": "^0.6.2",
     "dotenv": "^17.2.3",
     "tsdown": "^0.15.9",
     "tsx": "^4.20.6",

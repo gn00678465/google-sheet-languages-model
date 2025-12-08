@@ -4,3 +4,6 @@ dist
 *.log
 **/.env
 tmp
+
+# Release artifacts
+.release-it.json

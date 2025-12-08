@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import process from "node:process"
+// @ts-expect-error - TypeScript does not support importing JSON modules with 'with { type: "json" }' syntax, or credentials.json may not exist in all environments
 import credentials from './credentials.json' with { type: 'json' }
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
