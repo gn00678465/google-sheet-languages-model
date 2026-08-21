@@ -1,5 +1,5 @@
 ---
-status: ready-for-agent
+status: done
 date: 2026-08-21
 adrs: [0001, 0002]
 depends_on: [0001]
@@ -141,3 +141,13 @@ Spec 0001 只搬了 `flatten`。`gslm-core` 目前還沒有 Catalog、Locale、M
 - **非 Source 獨有 key 的附加**是相對舊版的行為變更，目的是不丟資料；CLI spec 應在 push 時把這些 key 列為警告，讓使用者決定是否補到 Source。
 - **依標題對應欄位**也是行為變更：舊版假設欄位順序與 locale 清單一致。若使用者的 Sheet 標題列與 locale 代碼不一致（例如標題寫 `English`），pull 會直接報錯，比舊版靜默配錯更安全；錯誤訊息會列出實際欄位以便修正。
 - `flatten` 對葉節點的泛型行為（0001）不變，避免破壞已公開的 API；字串約束只在 Catalog 層。
+
+## Comments
+
+### 2026-08-21 實作備註
+
+- `gslm-core` 新增 `unflatten`、`Catalog`（`from_value` / `to_value(Format)`）、`Model`（`new` / `set_catalog` / `orphan_keys` / `ordered_keys` / `to_table` / `from_table`）與統一的 `ConversionError`；0001 的 `FlattenError` 併入 `ConversionError`，`flatten` 行為與錯誤訊息不變。
+- `Locale` 以 `String` 型別別名實作而非 newtype：本層不驗證格式，newtype 只會增加 napi 邊界的轉換成本。
+- napi 層暴露 `unflatten`、`sheetToModel(rows, locales)`、`modelToSheet(model)`、`orphanKeys(model)`；**未加** spec 提到的 `options.separator`——Model ⇄ Tab 轉換中 key 是不透明字串，separator 沒有作用，保留只會誤導。`catalogToNest` / `catalogToFlat` 也未加：`unflatten` 已涵蓋。
+- TS 介面以 `Model` 命名（`#[napi(object, js_name = "Model")]`），形狀為 `{ locales: string[], catalogs: Record<string, Record<string, string>> }`，透過 napi 的 `object_indexmap` feature 保留 locale 與 key 順序。
+- 測試：Rust 46 個（含往返測試），JS 18 個（`node:test`）。定案表每一列都有對應 Rust 測試。
