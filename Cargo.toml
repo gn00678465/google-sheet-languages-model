@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/gslm-core", "packages/gslm"]
+members = ["crates/gslm-core", "crates/gslm-sheets", "packages/gslm"]
 resolver = "2"
 
 [workspace.package]
@@ -10,10 +10,19 @@ repository = "https://github.com/gn00678465/google-sheet-languages-model"
 
 [workspace.dependencies]
 gslm-core = { path = "crates/gslm-core" }
+gslm-sheets = { path = "crates/gslm-sheets" }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider", "http2"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+gcp_auth = "0.12"
+tokio = { version = "1", features = ["rt", "macros", "sync"] }
+serde = { version = "1", features = ["derive"] }
+percent-encoding = "2"
+async-trait = "0.1"
+wiremock = "0.6"
 serde_json = { version = "1", features = ["preserve_order"] }
 indexmap = { version = "2", features = ["serde"] }
 thiserror = "2"
-napi = { version = "3", default-features = false, features = ["napi8", "serde-json-ordered", "object_indexmap"] }
+napi = { version = "3", default-features = false, features = ["napi8", "serde-json-ordered", "object_indexmap", "async"] }
 napi-derive = { version = "3", default-features = false, features = ["type-def"] }
 napi-build = "2"
 
