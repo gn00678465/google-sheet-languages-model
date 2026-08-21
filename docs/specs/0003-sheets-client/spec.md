@@ -1,5 +1,5 @@
 ---
-status: ready-for-agent
+status: done
 date: 2026-08-21
 adrs: [0001, 0002, 0004]
 depends_on: [0002]
@@ -146,3 +146,15 @@ napi 層暴露 `SheetsClient` class，方法回傳 Promise；憑證與 base URL 
 - **musl 根憑證**：`reqwest` 與 `gcp_auth` 皆在執行期讀系統 CA。alpine 容器需 `ca-certificates`；若 CI 容器測試因此失敗，改用 `webpki-roots` feature（兩個 crate 都支援）並記錄在 ADR-0004 的後果中。
 - **napi async**：`#[napi] async fn` 需要 `tokio_rt` feature 與 napi 管理的 runtime；`gcp_auth` 與 `reqwest` 的 client 必須在該 runtime 內建立（或至少在其內使用）。若 `SheetsClient::create` 在 Rust 端同步載入憑證但 ADC 需要 async，以 factory async fn 解決。
 - **sheet ID 格式驗證**（舊版 `validateSheetId` 的 20+ 字元規則）不在此層：交給 Google 回 404。
+
+## Comments
+
+### 2026-08-21 實作備註
+
+- 新 crate `gslm-sheets`：`SheetsClient::builder(creds).base_url(..).token_provider(..).build()`；`read_tab` / `write_tab`；`SheetsError` 含 `code()` 與 `is_transient()`。Rust 測試：10 unit + 13 integration（wiremock）+ 1 `#[ignore]` live。
+- **napi 的 `async fn` 不支援自訂 error status 型別**（`Error<S>` 只能用在同步函式），因此 `error.code` 無法從 Rust 直接設定。解法：Rust 端訊息帶 `[CODE] ` 前綴；napi 產生的檔改名 `binding.js` / `binding.d.ts`，手寫 `index.js`（約 40 行）包裝 `SheetsClient` 把前綴轉成 `code` 並去除，`index.d.ts` 手寫 re-export 並加上 `SheetsErrorCode` union 與 `SheetsError` 介面。其他函式原樣 re-export。
+- `gcp_auth` 會在建構時即解析 RSA 私鑰並要求 `token_uri` 欄位，因此測試夾具是一把本機產生的拋棄式 RSA key（`tests/fixtures/service-account.json`，附 README 說明）。
+- `gcp_auth` 沒有暴露「清除快取」的 API，`TokenProvider::invalidate` 對它是 no-op；401 重試一次仍會走 gcp_auth 自身的過期判斷。靜態 token 與測試用 provider 則可真正輪替。
+- `FORMATTED_VALUE` 回傳的非字串儲存格（數字、布林）以 JSON 字面值字串化；`null` 為空字串。
+- JS 測試 5 個（`node:http` fixture server + `accessToken`），在 CI 每個平台執行，驗證 napi 內的 tokio runtime。CI 的 `js-loader` artifact 改上傳 `binding.js` / `binding.d.ts`。
+- musl 根憑證問題在本票未觸發（測試走 HTTP，不經 TLS），首個 beta 的 live 驗證才會碰到；若失敗依 spec 改 `webpki-roots`。

@@ -105,14 +105,14 @@ jobs:
           name: bindings-${{ matrix.settings.target }}
           path: ${{ env.PKG_DIR }}/*.node
           if-no-files-found: error
-      - name: Upload generated loader (index.js / index.d.ts reflect package.json version)
+      - name: Upload generated loader (binding.js / binding.d.ts reflect package.json version)
         if: matrix.settings.target == 'x86_64-unknown-linux-gnu'
         uses: actions/upload-artifact@v4
         with:
           name: js-loader
           path: |
-            ${{ env.PKG_DIR }}/index.js
-            ${{ env.PKG_DIR }}/index.d.ts
+            ${{ env.PKG_DIR }}/binding.js
+            ${{ env.PKG_DIR }}/binding.d.ts
           if-no-files-found: error
 
   test-native:
