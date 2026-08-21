@@ -96,3 +96,13 @@ adrs: [0001, 0002, 0005]
 - **GitHub Packages 的 canary 堆積**：GitHub Packages 可透過 API 刪除版本，但不建議在 CI 自動刪；canary 版本累積是可接受的代價，必要時手動清理。
 - **若 `verify-install` 失敗**且原因是 GitHub Packages 不處理 `optionalDependencies` 的 `os`/`cpu`/`libc` 篩選，這是 ADR-0005 的重評觸發條件，應回報維護者而非在本票內繞過（例如改用 postinstall 下載）。
 - 參考實作：`docs/research/node-rs-reference.md`（node-rs 的 workspace、package.json、CI 原檔連結）與 `docs/research/node-sdk-architecture.md` §2（Rolldown / oxc 的 optionalDependencies 與載入器行為）。
+
+## Comments
+
+### 2026-08-21 實作備註
+
+- 套件名沿用 `@gn00678465/google-sheet-languages-model`（維護者決定）；平台子套件為 `@gn00678465/google-sheet-languages-model-<platform>`。根目錄 `package.json` 改名為 `google-sheet-languages-model-workspace` 並設 `private: true` 以避免 workspace 內同名。
+- 發佈 tag 改為 `napi-v<version>` 而非 spec 所寫的 `v*`：既有 `publish.yml` 仍綁 `v*.*.*`，兩者並存期間需區隔。
+- JS 測試改用 Node 內建 `node:test`（`.cjs`）而非 vitest：vitest/esbuild 帶平台二進位，無法在 alpine／arm64 容器裡沿用 host 的 `node_modules`；`node:test` 讓容器測試零依賴。根目錄舊實作仍用 vitest。
+- `bin/gslm.js --version` 印 npm 套件版本（非 Rust core 版本），但仍會先載入 binding 以證明呼叫鏈；`version()` API 回報 core 版本。
+- `napi prepublish --dry-run` 不會寫入 `optionalDependencies`，因此 PR 上的 `npm publish --dry-run` 輸出不含平台子套件清單；真正發佈時才會有。
