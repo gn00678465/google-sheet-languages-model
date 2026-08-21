@@ -170,6 +170,18 @@ mod tests {
     }
 
     #[test]
+    fn flat_prefix_conflict_is_accepted_until_nest_output() {
+        // `a` and `a.b` can coexist in flat form; only nest output is impossible.
+        let c = Catalog::from_value(&json!({"a": "x", "a.b": "y"}), ".").unwrap();
+        assert_eq!(c.len(), 2);
+        assert!(c.to_value(Format::Flat, ".").is_ok());
+        assert_eq!(
+            c.to_value(Format::Nest, ".").unwrap_err(),
+            ConversionError::KeyConflict { key: "a.b".into() }
+        );
+    }
+
+    #[test]
     fn to_flat_and_nest() {
         let c = Catalog::from_entries([("user.name", "Name"), ("ok", "")]);
         assert_eq!(

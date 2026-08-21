@@ -87,7 +87,7 @@ Spec 0001 只搬了 `flatten`。`gslm-core` 目前還沒有 Catalog、Locale、M
 - **Format**：`Nest | Flat` 列舉，只影響輸出；輸入不需指定。
 - **Key separator**：所有轉換函式接受 separator 參數，預設 `.`；空字串為錯誤。
 - **Tab 表格**：`Vec<Vec<String>>`，第一列為標題。這是與 Sheets API `values.get` / `values.update` 交換的形態，HTTP 層（後續 spec）只負責搬運，不做轉換。
-- **錯誤**：單一 `ConversionError` 列舉，涵蓋：根節點非物件、葉節點非字串（含 key）、數字 key 段（含 key）、陣列（含 key）、空 separator、unflatten 衝突（含 key）、表格為空、標題缺少 locale（含請求的 locale 與實際欄位清單）、重複 key（含 key 與列號）。實作 `Display` 與 `std::error::Error`。
+- **錯誤**：單一 `ConversionError` 列舉，0001 的 `FlattenError` 併入此列舉（`flatten` 的行為與訊息不變，只有型別名稱改變；此時尚無外部使用者），涵蓋：根節點非物件、葉節點非字串（含 key）、數字 key 段（含 key）、陣列（含 key）、空 separator、unflatten 衝突（含 key）、表格為空、標題缺少 locale（含請求的 locale 與實際欄位清單）、重複 key（含 key 與列號）。實作 `Display` 與 `std::error::Error`。
 
 ### 轉換規則（定案）
 
@@ -110,6 +110,12 @@ Spec 0001 只搬了 `flatten`。`gslm-core` 目前還沒有 Catalog、Locale、M
 | 數字 key 段 | unflatten 時 throw | 錯誤（兩方向） |
 | unflatten：`a` 與 `a.b` 並存 | lodash `set` 靜默改寫 | 錯誤 |
 | 儲存格前後空白 | 原樣 | 原樣 |
+| 混合輸入攤平後 key 重複（`{"a":{"b":..},"a.b":..}`） | 後者覆蓋 | 錯誤（含 key） |
+| flat 輸入中 `a` 與 `a.b` 並存 | — | Catalog 可建構、flat 輸出正常；**nest 輸出**時報 KeyConflict |
+| pull：標題比對 | 位置 | **精確比對**（不 trim、區分大小寫）；重複標題取第一個；第一欄不參與比對 |
+| pull：只有標題列 | 空 Model | 合法的空 Model（CLI 層須在覆寫非空本地檔前警告，見 Further Notes） |
+| pull：key 含數字段 | 接受 | Tab → Model **接受**（key 在此層為不透明字串）；nest 輸出時才報錯，錯誤含 key 可在 Sheet 搜尋 |
+| push：key 含數字段（`errors.404`） | 接受 | Catalog 建構時**報錯**——相對舊版的行為變更，見 Further Notes |
 
 ### napi 層
 
@@ -121,7 +127,7 @@ Spec 0001 只搬了 `flatten`。`gslm-core` 目前還沒有 Catalog、Locale、M
 ## Testing Decisions
 
 - 好的測試描述「給這個輸入，得到這個輸出或這個錯誤」，不檢查內部結構。每一條「定案」表格的列至少對應一個測試。
-- **Rust 單元測試**（`gslm-core`）：Catalog 建構（nest、flat、混合、各種錯誤）；unflatten（順序、衝突、separator）；Model → Tab（標題、列順序、附加 key、空儲存格）；Tab → Model（標題對應、欄位調換、多餘欄、短列、空 key 列、重複 key、空表格、空白保留）；以及 **往返測試**：`Model → Tab → Model` 與 `Catalog → nest → Catalog` 在不含空字串的資料上必須恆等。延續 0001 的 `#[cfg(test)] mod tests` 風格。
+- **Rust 單元測試**（`gslm-core`）：Catalog 建構（nest、flat、混合、各種錯誤）；unflatten（順序、衝突、separator）；Model → Tab（標題、列順序、附加 key、空儲存格）；Tab → Model（標題對應、欄位調換、多餘欄、短列、空 key 列、重複 key、空表格、空白保留）；以及 **往返測試**：`Catalog → nest → Catalog` 必須恆等（含空字串）；`Model → Tab → Model` 在不含空字串的資料上，Source locale 的 Catalog 必須恆等，非 Source locale 的 Catalog 以集合比較（其順序經往返後會變成 Source 的列順序，這是 Tab 單一列順序的必然結果）。延續 0001 的 `#[cfg(test)] mod tests` 風格。
 - **JS 整合測試**（`packages/gslm/__tests__`，`node:test`）：每個新函式一組基本案例 + 一個錯誤案例 + key 順序檢查；重點是跨邊界的型別與錯誤轉換正確，不重複 Rust 端的邊界矩陣。延續 0001 的 `flatten.test.cjs`。
 - 先例：舊版 `src/__test__/LanguagesModel.test.ts`、`GoogleSheetLanguagesModel.test.ts` 與其 `i18n/` 夾具可作為案例來源（但行為依本 spec 的定案，不依舊版輸出）。
 
@@ -141,6 +147,8 @@ Spec 0001 只搬了 `flatten`。`gslm-core` 目前還沒有 Catalog、Locale、M
 - **非 Source 獨有 key 的附加**是相對舊版的行為變更，目的是不丟資料；CLI spec 應在 push 時把這些 key 列為警告，讓使用者決定是否補到 Source。
 - **依標題對應欄位**也是行為變更：舊版假設欄位順序與 locale 清單一致。若使用者的 Sheet 標題列與 locale 代碼不一致（例如標題寫 `English`），pull 會直接報錯，比舊版靜默配錯更安全；錯誤訊息會列出實際欄位以便修正。
 - `flatten` 對葉節點的泛型行為（0001）不變，避免破壞已公開的 API；字串約束只在 Catalog 層。
+- **數字 key 段在 push 端報錯**是相對舊版的行為變更：舊版只在 `flatToNest`（pull）檢查，push `errors.404` 可以成功。新版在 Catalog 建構時即拒絕，避免推上去的 key 拉不回來。遷移說明需提醒使用者改用非純數字的段（如 `errors.e404`）。
+- **只有標題列的 Tab** 是合法的空 Model（新建 tab 的正常狀態）。但 pull 寫檔時若本地檔非空而 Model 為空，極可能是 tab 名稱錯誤；這個防護屬於 CLI / 檔案 I/O 層，後續 spec 必須加入。
 
 ## Comments
 

@@ -17,6 +17,10 @@ pub enum ConversionError {
     NonStringTranslation { key: String, kind: &'static str },
     #[error("key {key:?} conflicts with a nested key under the same prefix")]
     KeyConflict { key: String },
+    #[error(
+        "key {key:?} appears more than once after flattening (nested and dotted forms both present)"
+    )]
+    DuplicateFlatKey { key: String },
     #[error("sheet is empty (no header row); check the tab name")]
     EmptySheet,
     #[error("locale {locale:?} not found in header row; available columns: {available:?}")]

@@ -37,7 +37,9 @@ fn walk(
             Value::Object(inner) => walk(inner, separator, path, out)?,
             Value::Array(_) => return Err(ConversionError::ArrayNotSupported(path)),
             leaf => {
-                out.insert(path, leaf.clone());
+                if out.insert(path.clone(), leaf.clone()).is_some() {
+                    return Err(ConversionError::DuplicateFlatKey { key: path });
+                }
             }
         }
     }
@@ -125,6 +127,12 @@ mod tests {
             flatten(&json!({"a": {"days": ["Mon", "Tue"]}}), ".").unwrap_err(),
             ConversionError::ArrayNotSupported("a.days".into())
         );
+    }
+
+    #[test]
+    fn rejects_duplicate_key_from_mixed_shapes() {
+        let err = flatten(&json!({"a": {"b": "x"}, "a.b": "y"}), ".").unwrap_err();
+        assert_eq!(err, ConversionError::DuplicateFlatKey { key: "a.b".into() });
     }
 
     #[test]

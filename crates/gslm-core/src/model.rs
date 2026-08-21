@@ -296,6 +296,41 @@ mod tests {
     }
 
     #[test]
+    fn from_table_header_match_is_exact_and_first_wins_and_skips_key_column() {
+        // exact: "en " (trailing space) is not "en"
+        let rows = vec![row(&["key", "en "])];
+        assert!(matches!(
+            Model::from_table(&rows, ["en"]).unwrap_err(),
+            ConversionError::LocaleNotInHeader { .. }
+        ));
+        // first match wins on duplicate headers
+        let rows = vec![row(&["key", "en", "en"]), row(&["a", "first", "second"])];
+        let m = Model::from_table(&rows, ["en"]).unwrap();
+        assert_eq!(m.catalog("en").unwrap().get("a"), Some("first"));
+        // the key column never matches a locale
+        let rows = vec![row(&["key", "en"])];
+        assert!(matches!(
+            Model::from_table(&rows, ["key"]).unwrap_err(),
+            ConversionError::LocaleNotInHeader { .. }
+        ));
+    }
+
+    #[test]
+    fn round_trip_is_order_insensitive_for_non_source_locales() {
+        let mut m = Model::new(["en", "zh"]);
+        m.set_catalog("en", Catalog::from_entries([("a", "A"), ("b", "B")]))
+            .unwrap();
+        m.set_catalog("zh", Catalog::from_entries([("b", "乙"), ("a", "甲")]))
+            .unwrap();
+        let back = Model::from_table(&m.to_table(), ["en", "zh"]).unwrap();
+        // Source order is restored exactly; zh comes back in Source (row) order.
+        assert_eq!(back.catalog("en").unwrap(), m.catalog("en").unwrap());
+        let zh: Vec<_> = back.catalog("zh").unwrap().keys().collect();
+        assert_eq!(zh, ["a", "b"]);
+        assert_eq!(back.catalog("zh").unwrap().entries().len(), 2);
+    }
+
+    #[test]
     fn from_table_missing_locale_lists_available_columns() {
         let rows = vec![row(&["key", "English", "zh-TW"])];
         let err = Model::from_table(&rows, ["en", "zh-TW"]).unwrap_err();

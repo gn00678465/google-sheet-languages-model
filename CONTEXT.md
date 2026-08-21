@@ -11,12 +11,16 @@
 _Avoid_: language, lang
 
 **Source locale**:
-Target 的 locales 清單中的第一個 locale。它的 key 集合與順序決定 Sheet 的列順序；其他 locale 多出的 key 不會出現在 Sheet 中。
+Target 的 locales 清單中的第一個 locale。它的 key 順序決定 Tab 的列順序；只存在於其他 locale 的 key（orphan key）排在其後。
 _Avoid_: main language, default language, primary locale
 
 **Key**:
 翻譯條目的唯一識別字串，以分隔符號（預設 `.`）表示階層，例如 `user.name`。Key 的任一段不得是純數字。
 _Avoid_: path, id, message id
+
+**Orphan key**:
+存在於某個非 Source locale 的 catalog、但不存在於 Source locale 的 key。
+_Avoid_: extra key, missing source key
 
 **Translation**:
 某個 key 在某個 locale 下的文字值。缺少 translation 與 translation 為空字串是不同的狀態。
@@ -41,7 +45,7 @@ _Avoid_: delimiter, namespace separator
 _Avoid_: spreadsheet, document
 
 **Tab**:
-Sheet 內的單一工作表，以名稱識別。一個 tab 的第一列是 `key` 加上各 locale，其後每列一個 key。
+Sheet 內的單一工作表，以名稱識別。第一列是標題列：第一欄為 key 欄（標題文字不拘），其餘欄以 locale 為標題；其後每列一個 key。未對應到 locale 的欄會被忽略。
 _Avoid_: sheet title, worksheet, page
 
 **Target**:
