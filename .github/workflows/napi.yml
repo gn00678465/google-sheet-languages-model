@@ -38,7 +38,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97 # keep in sync with rust-toolchain.toml
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -85,7 +85,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97 # keep in sync with rust-toolchain.toml
         with:
           targets: ${{ matrix.settings.target }}
       - uses: Swatinem/rust-cache@v2
@@ -104,6 +104,15 @@ jobs:
         with:
           name: bindings-${{ matrix.settings.target }}
           path: ${{ env.PKG_DIR }}/*.node
+          if-no-files-found: error
+      - name: Upload generated loader (index.js / index.d.ts reflect package.json version)
+        if: matrix.settings.target == 'x86_64-unknown-linux-gnu'
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-loader
+          path: |
+            ${{ env.PKG_DIR }}/index.js
+            ${{ env.PKG_DIR }}/index.d.ts
           if-no-files-found: error
 
   test-native:
@@ -190,45 +199,52 @@ jobs:
           registry-url: https://npm.pkg.github.com
           scope: '@gn00678465'
       - run: pnpm install --frozen-lockfile
-      - name: Resolve version
+      - name: Resolve version (package.json is the source of truth; a release tag must match it)
         id: ver
         shell: bash
+        working-directory: ${{ env.PKG_DIR }}
         run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF" == refs/tags/napi-v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/napi-v}" >> "$GITHUB_OUTPUT"
+            tag_version="${GITHUB_REF#refs/tags/napi-v}"
+            if [[ "$tag_version" != "$version" ]]; then
+              echo "::error::tag napi-v$tag_version does not match package.json version $version (bump with 'pnpm release' first)"
+              exit 1
+            fi
             echo "is-release=true" >> "$GITHUB_OUTPUT"
           else
-            echo "version=0.0.0-dryrun.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
             echo "is-release=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Set package version
-        working-directory: ${{ env.PKG_DIR }}
-        run: npm version --no-git-tag-version --allow-same-version "${{ steps.ver.outputs.version }}"
       - uses: actions/download-artifact@v4
         with:
+          pattern: bindings-*
           path: artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: js-loader
+          path: ${{ env.PKG_DIR }}
       - name: Assemble platform packages
         working-directory: ${{ env.PKG_DIR }}
         run: |
           pnpm exec napi create-npm-dirs
           pnpm exec napi artifacts -d ../../artifacts
-          pnpm exec napi version
           ls -R npm
-      - name: Publish platform packages (dry-run)
+      - name: Publish (dry-run)
         if: steps.ver.outputs.is-release != 'true'
         working-directory: ${{ env.PKG_DIR }}
         run: |
           pnpm exec napi prepublish -t npm --no-gh-release --dry-run
-          npm publish --dry-run
-      - name: Publish platform packages + root package
+          npm publish --dry-run --ignore-scripts
+      - name: Publish platform packages, then root package
         if: steps.ver.outputs.is-release == 'true'
         working-directory: ${{ env.PKG_DIR }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm exec napi prepublish -t npm --no-gh-release
-          cat package.json
-          npm publish
+          node -p "require('./package.json').optionalDependencies"
+          npm publish --ignore-scripts
 
   verify-install:
     name: verify-install ${{ matrix.settings.label }}
@@ -240,6 +256,8 @@ jobs:
         settings:
           - host: ubuntu-latest
             label: linux-x64-gnu
+          - host: ubuntu-24.04-arm
+            label: linux-arm64-gnu
           - host: macos-latest
             label: darwin-arm64
           - host: windows-latest
@@ -254,51 +272,36 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://npm.pkg.github.com
-          scope: '@gn00678465'
-      - name: Install from GitHub Packages into an empty project
+      - name: Install from GitHub Packages (local + global) and verify
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/consumer" && cd "$RUNNER_TEMP/consumer"
-          npm init -y >/dev/null
-          npm install "${PKG_NAME}@${{ needs.publish.outputs.version }}"
-          node "$GITHUB_WORKSPACE/scripts/verify-install.cjs" "${{ needs.publish.outputs.version }}"
-      - name: Global install
-        shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npm install -g "${PKG_NAME}@${{ needs.publish.outputs.version }}"
-          out="$(gslm --version)"
-          test "$out" = "${{ needs.publish.outputs.version }}" || { echo "gslm --version printed '$out'"; exit 1; }
-          echo "✓ global gslm --version = $out"
+        run: sh scripts/verify-install.sh "${{ needs.publish.outputs.version }}"
 
   verify-install-musl:
+    name: verify-install ${{ matrix.label }}
     needs: publish
     if: needs.publish.outputs.is-release == 'true'
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: ubuntu-latest
+            platform: linux/amd64
+            label: linux-x64-musl
+          - host: ubuntu-24.04-arm
+            platform: linux/arm64
+            label: linux-arm64-musl
+    runs-on: ${{ matrix.host }}
     permissions:
       packages: read
     steps:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: scripts
-      - name: Install from GitHub Packages inside alpine
+      - name: Install from GitHub Packages inside alpine and verify
         run: |
-          docker run --rm -v "${{ github.workspace }}/scripts:/scripts" \
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v "${{ github.workspace }}/scripts:/scripts" \
             -e NODE_AUTH_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
-            -e VERSION="${{ needs.publish.outputs.version }}" \
-            -e PKG_NAME="${PKG_NAME}" \
-            node:22-alpine sh -c '
-              set -e
-              mkdir /consumer && cd /consumer
-              printf "@gn00678465:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}\n" > .npmrc
-              npm init -y >/dev/null
-              npm install "${PKG_NAME}@${VERSION}"
-              node /scripts/verify-install.cjs "${VERSION}"
-              npm install -g "${PKG_NAME}@${VERSION}"
-              test "$(gslm --version)" = "${VERSION}"
-              echo "✓ global gslm --version on musl"
-            '
+            node:22-alpine sh /scripts/verify-install.sh "${{ needs.publish.outputs.version }}"

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Acceptance check for spec 0001: run inside an EMPTY directory after
+// Acceptance check for spec 0001: run inside an EMPTY project after
 //   npm install @gn00678465/google-sheet-languages-model@<version>
-// Asserts that (1) exactly one platform sub-package was installed and it
-// matches the current platform, (2) the binding loads and `flatten` behaves,
-// (3) the bin launcher reports the expected version.
+// Asserts that (1) exactly one platform sub-package was installed, (2) the
+// binding loads from that very sub-package and `flatten` behaves, (3) the bin
+// launcher reports the expected version.
 const { readdirSync, existsSync } = require('node:fs')
-const { join } = require('node:path')
+const { join, sep } = require('node:path')
 const { execFileSync } = require('node:child_process')
 
 const SCOPE = '@gn00678465'
@@ -22,30 +22,25 @@ const fail = (msg) => {
 }
 const ok = (msg) => console.log(`✓ ${msg}`)
 
-// (1) exactly one platform sub-package, matching this platform
+// (1) exactly one platform sub-package
 const scopeDir = join(process.cwd(), 'node_modules', SCOPE)
 if (!existsSync(scopeDir)) fail(`${scopeDir} does not exist`)
 const platformPkgs = readdirSync(scopeDir).filter((d) => d.startsWith(`${NAME}-`))
 if (platformPkgs.length !== 1) {
   fail(`expected exactly 1 platform package, found ${platformPkgs.length}: ${platformPkgs.join(', ')}`)
 }
-const libc = (() => {
-  if (process.platform !== 'linux') return ''
-  const report = process.report?.getReport?.()
-  const isMusl = report?.header?.glibcVersionRuntime === undefined
-  return isMusl ? '-musl' : '-gnu'
-})()
-const expectedSuffix =
-  process.platform === 'win32'
-    ? `win32-${process.arch}-msvc`
-    : `${process.platform}-${process.arch}${libc}`
-if (platformPkgs[0] !== `${NAME}-${expectedSuffix}`) {
-  fail(`platform package ${platformPkgs[0]} does not match expected ${NAME}-${expectedSuffix}`)
-}
 ok(`single platform package installed: ${platformPkgs[0]}`)
 
-// (2) binding loads and behaves
+// (2) binding loads — from that sub-package — and behaves
 const pkg = require(`${SCOPE}/${NAME}`)
+const loadedNative = Object.keys(require.cache).find((k) => k.endsWith('.node'))
+if (!loadedNative) fail('no .node module found in require.cache after loading the package')
+const expectedDir = `${sep}${NAME}-${platformPkgs[0].slice(NAME.length + 1)}${sep}`
+if (!loadedNative.includes(expectedDir)) {
+  fail(`loaded ${loadedNative}, which is not inside the installed sub-package ${platformPkgs[0]}`)
+}
+ok(`binding loaded from ${loadedNative}`)
+
 const out = pkg.flatten({ a: { b: 'x' }, c: 'y' })
 if (JSON.stringify(out) !== JSON.stringify({ 'a.b': 'x', c: 'y' })) {
   fail(`flatten returned ${JSON.stringify(out)}`)
@@ -54,7 +49,7 @@ if (Object.keys(out).join(',') !== 'a.b,c') fail(`key order not preserved: ${Obj
 ok('flatten() works and preserves key order')
 
 const v = pkg.version()
-if (typeof v !== 'string' || v.length === 0) fail('version() returned empty')
+if (v !== expectedVersion) fail(`version() returned "${v}", expected "${expectedVersion}"`)
 ok(`version() = ${v}`)
 
 // (3) bin launcher
