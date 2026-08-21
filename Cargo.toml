@@ -11,8 +11,9 @@ repository = "https://github.com/gn00678465/google-sheet-languages-model"
 [workspace.dependencies]
 gslm-core = { path = "crates/gslm-core" }
 serde_json = { version = "1", features = ["preserve_order"] }
+indexmap = { version = "2", features = ["serde"] }
 thiserror = "2"
-napi = { version = "3", default-features = false, features = ["napi8", "serde-json-ordered"] }
+napi = { version = "3", default-features = false, features = ["napi8", "serde-json-ordered", "object_indexmap"] }
 napi-derive = { version = "3", default-features = false, features = ["type-def"] }
 napi-build = "2"
 

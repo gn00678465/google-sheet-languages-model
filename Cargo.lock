@@ -127,6 +127,7 @@ dependencies = [
 name = "gslm-core"
 version = "0.0.0"
 dependencies = [
+ "indexmap",
  "serde_json",
  "thiserror",
 ]
@@ -136,6 +137,7 @@ name = "gslm-napi"
 version = "0.0.0"
 dependencies = [
  "gslm-core",
+ "indexmap",
  "napi",
  "napi-build",
  "napi-derive",
@@ -156,6 +158,8 @@ checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 dependencies = [
  "equivalent",
  "hashbrown",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -195,6 +199,7 @@ dependencies = [
  "bitflags",
  "ctor",
  "futures",
+ "indexmap",
  "libc",
  "napi-build",
  "napi-sys",

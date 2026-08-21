@@ -8,4 +8,5 @@ repository.workspace = true
 
 [dependencies]
 serde_json = { workspace = true }
+indexmap = { workspace = true }
 thiserror = { workspace = true }
