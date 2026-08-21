@@ -61,18 +61,14 @@ impl SheetsClientBuilder {
     }
 
     pub async fn build(self) -> Result<SheetsClient, SheetsError> {
-        // Respect a provider the host process already installed (e.g.
-        // aws-lc-rs); only fall back to ring when nothing is registered. A
-        // concurrent install racing here is benign: either one works.
-        if rustls::crypto::CryptoProvider::get_default().is_none() {
-            let _ = rustls::crypto::ring::default_provider().install_default();
-        }
+        let tls = tls_config()?;
 
         let provider = match self.provider {
             Some(p) => p,
             None => provider_for(self.credentials).await?,
         };
         let http = reqwest::Client::builder()
+            .tls_backend_preconfigured(tls)
             .user_agent(USER_AGENT)
             .connect_timeout(self.connect_timeout)
             .timeout(self.timeout)
@@ -250,6 +246,25 @@ impl SheetsClient {
             s => SheetsError::Http { status: s, message },
         }
     }
+}
+
+/// TLS config with the bundled Mozilla root store (`webpki-roots`), so the
+/// client works in containers without `ca-certificates` (e.g. `node:*-slim`)
+/// and behaves identically on every platform. Uses the crypto provider the
+/// host process already installed (e.g. aws-lc-rs), falling back to ring.
+fn tls_config() -> Result<rustls::ClientConfig, SheetsError> {
+    let provider = rustls::crypto::CryptoProvider::get_default()
+        .cloned()
+        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let mut config = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|e| SheetsError::Network(format!("TLS setup failed: {e}")))?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    Ok(config)
 }
 
 fn cell_to_string(v: serde_json::Value) -> String {

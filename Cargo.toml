@@ -13,7 +13,8 @@ gslm-core = { path = "crates/gslm-core" }
 gslm-sheets = { path = "crates/gslm-sheets" }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider", "http2"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-gcp_auth = "0.12"
+gcp_auth = { version = "0.12", features = ["webpki-roots"] }
+webpki-roots = "1"
 tokio = { version = "1", features = ["rt", "macros", "sync"] }
 serde = { version = "1", features = ["derive"] }
 percent-encoding = "2"

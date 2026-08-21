@@ -400,3 +400,16 @@ async fn request_timeout_is_configurable_and_reported_as_network_error() {
     let err = c.read_tab(SHEET, "i18n").await.unwrap_err();
     assert!(matches!(err, SheetsError::Network(_)), "{err:?}");
 }
+
+/// Real TLS handshake with the bundled root store; needs network only
+/// (no credentials): a bogus token must come back as `Auth`, not `Network`.
+#[tokio::test]
+#[ignore = "needs network"]
+async fn tls_handshake_with_google_uses_bundled_roots() {
+    let c = SheetsClient::builder(Credentials::AccessToken("bogus".into()))
+        .build()
+        .await
+        .unwrap();
+    let err = c.read_tab(SHEET, "i18n").await.unwrap_err();
+    assert!(matches!(err, SheetsError::Auth(_)), "{err:?}");
+}

@@ -159,4 +159,4 @@ napi 層暴露 `SheetsClient` class，方法回傳 Promise；憑證與 base URL 
 - JS 測試 5 個（`node:http` fixture server + `accessToken`），在 CI 每個平台執行，驗證 napi 內的 tokio runtime。CI 的 `js-loader` artifact 改上傳 `binding.js` / `binding.d.ts`。
 - **code review 後續**（2026-08-22）：修正 (1) `invalidate` 對 gcp_auth 為 no-op → 重建 provider；(2) `install_default()` 結果被忽略 → 僅在 `CryptoProvider::get_default()` 為 `None` 時才安裝 ring，尊重宿主程序已安裝的 provider；(3) 逾時硬編碼 → builder 可覆寫並補測試。
 - **未處理（記錄為後續）**：clear→PUT 非原子。原子替代方案為 `spreadsheets.batchUpdate` + `updateCells`（gridRange 只給數字 `sheetId`，需先 `spreadsheets.get?fields=sheets.properties` 由 tab 名查出 id）。目前維持兩步並以 `WriteAfterClearFailed` 標示，若使用者回報中斷造成空表，再開 spec 改為 batchUpdate。
-- musl 根憑證問題在本票未觸發（測試走 HTTP，不經 TLS），首個 beta 的 live 驗證才會碰到；若失敗依 spec 改 `webpki-roots`。
+- 根憑證問題提前在 CI 觸發：`node:22-slim`（aarch64 docker）沒有 `ca-certificates`，reqwest 0.13 的 `rustls-platform-verifier` 在 `Client::build()` 就失敗（`network error: builder error`），連走 HTTP 的測試也掛。依 spec 改為內建 `webpki-roots`（自組 `rustls::ClientConfig` 交給 `tls_backend_preconfigured`；`gcp_auth` 開 `webpki-roots` feature），並加一個 `#[ignore]` 的真實 TLS 握手測試（bogus token → `Auth`）。ADR-0004 已更新。

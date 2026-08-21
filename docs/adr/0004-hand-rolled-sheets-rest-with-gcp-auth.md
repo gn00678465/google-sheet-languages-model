@@ -11,5 +11,5 @@ date: 2026-08-21
 
 ## Consequences
 
-- TLS 後端統一 rustls + `ring`，`reqwest` 需關閉預設 feature 以免與 `aws-lc-rs` provider 衝突；musl target 需確認根憑證來源。
+- TLS 後端統一 rustls + `ring`，`reqwest` 需關閉預設 feature 以免與 `aws-lc-rs` provider 衝突。根憑證一律使用內建的 Mozilla bundle（`webpki-roots`，`reqwest` 與 `gcp_auth` 皆然），不讀系統 CA：`node:*-slim` 等容器沒有 `ca-certificates`，`rustls-platform-verifier` 會在建構 client 時直接失敗（2026-08-22 CI aarch64 docker 測試發現）。代價是根憑證隨套件版本更新，而非跟隨作業系統。
 - `gcp_auth` 為 0.x 單一維護者專案，若停更，替代路徑是 `jsonwebtoken` 自行簽 RS256 + 打 token endpoint（約 50 行）。
