@@ -1,0 +1,304 @@
+name: napi
+
+# Build / test / publish pipeline for the napi-rs rewrite (spec 0001).
+# Legacy ci.yml / publish.yml keep serving `main` and `v*.*.*` tags.
+#
+#   push to rewrite/** or PR  → lint + build + test + publish (dry-run)
+#   push tag napi-v<version>  → lint + build + test + publish + verify-install
+
+on:
+  push:
+    branches: ['rewrite/**']
+    tags: ['napi-v*']
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'packages/**'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'pnpm-workspace.yaml'
+      - 'scripts/verify-install.cjs'
+      - '.github/workflows/napi.yml'
+
+env:
+  PKG_DIR: packages/gslm
+  PKG_NAME: '@gn00678465/google-sheet-languages-model'
+
+concurrency:
+  group: napi-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - run: pnpm typecheck
+      - name: Legacy TypeScript tests
+        run: pnpm test
+
+  build:
+    name: build ${{ matrix.settings.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-latest
+            target: x86_64-apple-darwin
+            build: pnpm build --target x86_64-apple-darwin
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            build: pnpm build --target aarch64-apple-darwin
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            build: pnpm build --target x86_64-pc-windows-msvc
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build: TARGET_CC=clang pnpm build --target x86_64-unknown-linux-gnu --use-napi-cross
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            build: TARGET_CC=clang pnpm build --target aarch64-unknown-linux-gnu --use-napi-cross
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            build: pnpm build --target x86_64-unknown-linux-musl -x
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            build: pnpm build --target aarch64-unknown-linux-musl -x
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.settings.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.settings.target }}
+      - uses: mlugg/setup-zig@v2
+        if: ${{ contains(matrix.settings.target, 'musl') }}
+        with:
+          version: 0.15.2
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        run: ${{ matrix.settings.build }}
+        shell: bash
+        working-directory: ${{ env.PKG_DIR }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: ${{ env.PKG_DIR }}/*.node
+          if-no-files-found: error
+
+  test-native:
+    name: test ${{ matrix.settings.target }} node@${{ matrix.node }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+        settings:
+          - host: macos-latest
+            target: aarch64-apple-darwin
+          - host: macos-15-intel
+            target: x86_64-apple-darwin
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: ${{ env.PKG_DIR }}
+      - run: npm test
+        working-directory: ${{ env.PKG_DIR }}
+      - run: node bin/gslm.js --version
+        working-directory: ${{ env.PKG_DIR }}
+
+  test-linux-docker:
+    name: test ${{ matrix.settings.target }} node@${{ matrix.node }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+        settings:
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            image: alpine
+            platform: linux/amd64
+          - host: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            image: slim
+            platform: linux/arm64
+          - host: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            image: alpine
+            platform: linux/arm64
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: ${{ env.PKG_DIR }}
+      - name: Test in container (no node_modules needed: tests use node:test)
+        run: |
+          docker run --rm --platform ${{ matrix.settings.platform }} \
+            -v "${{ github.workspace }}:/build" -w /build/${{ env.PKG_DIR }} \
+            node:${{ matrix.node }}-${{ matrix.settings.image }} \
+            sh -c "npm test && node bin/gslm.js --version"
+
+  publish:
+    needs: [lint, test-native, test-linux-docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      is-release: ${{ steps.ver.outputs.is-release }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@gn00678465'
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/napi-v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/napi-v}" >> "$GITHUB_OUTPUT"
+            echo "is-release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-dryrun.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            echo "is-release=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Set package version
+        working-directory: ${{ env.PKG_DIR }}
+        run: npm version --no-git-tag-version --allow-same-version "${{ steps.ver.outputs.version }}"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Assemble platform packages
+        working-directory: ${{ env.PKG_DIR }}
+        run: |
+          pnpm exec napi create-npm-dirs
+          pnpm exec napi artifacts -d ../../artifacts
+          pnpm exec napi version
+          ls -R npm
+      - name: Publish platform packages (dry-run)
+        if: steps.ver.outputs.is-release != 'true'
+        working-directory: ${{ env.PKG_DIR }}
+        run: |
+          pnpm exec napi prepublish -t npm --no-gh-release --dry-run
+          npm publish --dry-run
+      - name: Publish platform packages + root package
+        if: steps.ver.outputs.is-release == 'true'
+        working-directory: ${{ env.PKG_DIR }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm exec napi prepublish -t npm --no-gh-release
+          cat package.json
+          npm publish
+
+  verify-install:
+    name: verify-install ${{ matrix.settings.label }}
+    needs: publish
+    if: needs.publish.outputs.is-release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: ubuntu-latest
+            label: linux-x64-gnu
+          - host: macos-latest
+            label: darwin-arm64
+          - host: windows-latest
+            label: win32-x64
+    runs-on: ${{ matrix.settings.host }}
+    permissions:
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          scope: '@gn00678465'
+      - name: Install from GitHub Packages into an empty project
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/consumer" && cd "$RUNNER_TEMP/consumer"
+          npm init -y >/dev/null
+          npm install "${PKG_NAME}@${{ needs.publish.outputs.version }}"
+          node "$GITHUB_WORKSPACE/scripts/verify-install.cjs" "${{ needs.publish.outputs.version }}"
+      - name: Global install
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm install -g "${PKG_NAME}@${{ needs.publish.outputs.version }}"
+          out="$(gslm --version)"
+          test "$out" = "${{ needs.publish.outputs.version }}" || { echo "gslm --version printed '$out'"; exit 1; }
+          echo "✓ global gslm --version = $out"
+
+  verify-install-musl:
+    needs: publish
+    if: needs.publish.outputs.is-release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - name: Install from GitHub Packages inside alpine
+        run: |
+          docker run --rm -v "${{ github.workspace }}/scripts:/scripts" \
+            -e NODE_AUTH_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
+            -e VERSION="${{ needs.publish.outputs.version }}" \
+            -e PKG_NAME="${PKG_NAME}" \
+            node:22-alpine sh -c '
+              set -e
+              mkdir /consumer && cd /consumer
+              printf "@gn00678465:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}\n" > .npmrc
+              npm init -y >/dev/null
+              npm install "${PKG_NAME}@${VERSION}"
+              node /scripts/verify-install.cjs "${VERSION}"
+              npm install -g "${PKG_NAME}@${VERSION}"
+              test "$(gslm --version)" = "${VERSION}"
+              echo "✓ global gslm --version on musl"
+            '
