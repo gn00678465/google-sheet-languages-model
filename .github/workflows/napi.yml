@@ -38,7 +38,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@1.97 # keep in sync with rust-toolchain.toml
+      - uses: dtolnay/rust-toolchain@1.97.1 # keep in sync with rust-toolchain.toml
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -85,7 +85,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@1.97 # keep in sync with rust-toolchain.toml
+      - uses: dtolnay/rust-toolchain@1.97.1 # keep in sync with rust-toolchain.toml
         with:
           targets: ${{ matrix.settings.target }}
       - uses: Swatinem/rust-cache@v2
