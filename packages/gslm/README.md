@@ -2,7 +2,23 @@
 
 Rust core（`crates/gslm-core`）+ napi-rs 綁定。本套件同時提供 Node SDK 與 `gslm` CLI（ADR-0001、ADR-0002）。
 
-> 目前完成 spec 0001–0002：暴露 `flatten` / `unflatten` / `sheetToModel` / `modelToSheet` / `orphanKeys` / `version`；`gslm` 只支援 `--version`。HTTP、config、CLI 指令尚未實作。
+> 目前完成 spec 0001–0003：暴露 `flatten` / `unflatten` / `sheetToModel` / `modelToSheet` / `orphanKeys` / `version` 與 `SheetsClient`；`gslm` 只支援 `--version`。config、CLI 指令尚未實作。
+
+## SDK 用法（目前可用的部分）
+
+```js
+const { SheetsClient, sheetToModel, modelToSheet } = require('@gn00678465/google-sheet-languages-model')
+
+// 憑證四選一：{ file }、{ json }、{ accessToken }，或省略走 Application Default Credentials
+const client = await SheetsClient.create({ credentials: { file: './credentials.json' } })
+
+const rows = await client.readTab('<sheetId>', 'i18n')        // string[][]
+const model = sheetToModel(rows, ['en', 'zh-TW'])             // { locales, catalogs }
+
+await client.writeTab('<sheetId>', 'i18n', modelToSheet(model)) // 先清空 tab 再以 RAW 寫入
+```
+
+錯誤是 `Error` 並帶 `code`（`PERMISSION_DENIED`、`SHEET_NOT_FOUND`、`TAB_NOT_FOUND`、`RATE_LIMITED`、`CREDENTIALS`、`NETWORK`…，完整清單見 `index.d.ts` 的 `SheetsErrorCode`）。
 
 ## 本地開發
 
@@ -20,7 +36,7 @@ pnpm -C packages/gslm test          # node:test，不需 vitest
 node packages/gslm/bin/gslm.js --version
 ```
 
-`index.js` / `index.d.ts` 由 `napi build` 自動產生並提交到 repo；`*.node` 與 `npm/` 不提交。
+`binding.js` / `binding.d.ts` 由 `napi build` 自動產生並提交到 repo；`index.js` / `index.d.ts` 是手寫的薄包裝（把 Sheets 錯誤的 `[CODE] ` 前綴轉成 `error.code`）。`*.node` 與 `npm/` 不提交。
 
 ## 發佈
 

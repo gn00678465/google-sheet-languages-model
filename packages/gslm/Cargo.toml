@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 gslm-core = { workspace = true }
+gslm-sheets = { workspace = true }
 serde_json = { workspace = true }
 indexmap = { workspace = true }
 napi = { workspace = true }
