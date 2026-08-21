@@ -701,4 +701,8 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.flatten = nativeBinding.flatten
+module.exports.modelToSheet = nativeBinding.modelToSheet
+module.exports.orphanKeys = nativeBinding.orphanKeys
+module.exports.sheetToModel = nativeBinding.sheetToModel
+module.exports.unflatten = nativeBinding.unflatten
 module.exports.version = nativeBinding.version

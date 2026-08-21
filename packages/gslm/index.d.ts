@@ -10,6 +10,52 @@
 export declare function flatten(value: any, separator?: string | undefined | null): Record<string, any>
 
 /**
+ * A Model as plain data: an ordered list of locales (the first is the Source
+ * locale) and one flat catalog per locale. Serializable as JSON.
+ */
+export interface Model {
+  locales: Array<string>
+  /**
+   * `locale → (key → translation)`. Missing keys mean "not translated";
+   * empty strings are kept as-is.
+   */
+  catalogs: Record<string, Record<string, string>>
+}
+
+/**
+ * Build Tab rows from a Model: header `["key", ...locales]`, then one row
+ * per key in Source-locale order followed by keys that exist only in other
+ * locales. Missing translations and empty strings both become `""`.
+ */
+export declare function modelToSheet(model: Model): Array<Array<string>>
+
+/**
+ * Keys that exist in some non-Source locale but not in the Source locale,
+ * in the order `modelToSheet` appends them.
+ */
+export declare function orphanKeys(model: Model): Array<string>
+
+/**
+ * Parse Tab rows (first row = header: key column + locale columns) into a
+ * Model for the requested locales. Columns are matched by header text; the
+ * first column is always the key column. Empty cells are missing
+ * translations; rows with an empty key are skipped.
+ *
+ * Throws if the sheet is empty, a requested locale is not in the header, or a
+ * key appears twice.
+ */
+export declare function sheetToModel(rows: Array<Array<string>>, locales: Array<string>): Model
+
+/**
+ * Inverse of `flatten`: rebuild a nested object from dotted keys.
+ * Key order is preserved at every level.
+ *
+ * Throws on numeric key segments, on conflicts such as `a` together with
+ * `a.b`, or if `separator` is empty.
+ */
+export declare function unflatten(flat: Record<string, any>, separator?: string | undefined | null): any
+
+/**
  * Version of the installed gslm package (read from package.json at build
  * time, so it always matches what `npm install` resolved).
  */

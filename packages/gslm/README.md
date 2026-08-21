@@ -2,7 +2,7 @@
 
 Rust core（`crates/gslm-core`）+ napi-rs 綁定。本套件同時提供 Node SDK 與 `gslm` CLI（ADR-0001、ADR-0002）。
 
-> 目前為 spec 0001 的骨架：只暴露 `flatten()` 與 `version()`，`gslm` 只支援 `--version`。
+> 目前完成 spec 0001–0002：暴露 `flatten` / `unflatten` / `sheetToModel` / `modelToSheet` / `orphanKeys` / `version`；`gslm` 只支援 `--version`。HTTP、config、CLI 指令尚未實作。
 
 ## 本地開發
 
