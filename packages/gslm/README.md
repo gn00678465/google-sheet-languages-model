@@ -22,22 +22,22 @@ node packages/gslm/bin/gslm.js --version
 
 `index.js` / `index.d.ts` 由 `napi build` 自動產生並提交到 repo；`*.node` 與 `npm/` 不提交。
 
-## 發佈（canary）
+## 發佈
 
-推送 tag `napi-v<version>`（例如 `napi-v0.0.0-canary.1`）會觸發 `.github/workflows/napi.yml`：
+`packages/gslm/package.json` 的 `version` 是唯一真相；tag 必須與它一致，否則 CI 拒絕發佈。正常流程是在 repo 根目錄執行 `pnpm release`（bumpp 會改這個檔、commit、打 `napi-v<version>` tag 並 push）。canary 可用 `pnpm release --preid canary prerelease`。
+
+推送 tag `napi-v<version>` 會觸發 `.github/workflows/napi.yml`：
 
 1. 7 個 target 建 `.node`，並在各平台（含 alpine / arm64 容器）跑測試
-2. `napi create-npm-dirs` + `napi artifacts` 組裝平台子套件，`napi prepublish` 發佈子套件並把 `optionalDependencies` 寫進主套件，再 `npm publish` 主套件到 GitHub Packages
-3. `verify-install` 在乾淨環境（linux gnu / alpine / macOS / Windows）從 GitHub Packages 安裝，執行 `scripts/verify-install.cjs`，並測 `npm i -g` 後的 `gslm --version`
+2. `napi create-npm-dirs` + `napi artifacts` 組裝平台子套件（`index.js`/`index.d.ts` 取自 linux-gnu build 的產物，確保 loader 內的版本號正確），`napi prepublish` 發佈子套件並把 `optionalDependencies` 寫進主套件，再 `npm publish --ignore-scripts` 主套件到 GitHub Packages
+3. `verify-install` 在乾淨環境（linux gnu x64/arm64、alpine x64/arm64、macOS、Windows）執行 `scripts/verify-install.sh`：從 GitHub Packages 安裝、跑 `scripts/verify-install.cjs`、再測 `npm i -g` 後的 `gslm --version`
 
 PR 與 `rewrite/**` 分支的 push 跑同樣流程但 publish 為 `--dry-run`。
 
 手動驗證已發佈版本：
 
 ```bash
-mkdir /tmp/consumer && cd /tmp/consumer && npm init -y
-npm install @gn00678465/google-sheet-languages-model@<version>
-node /path/to/repo/scripts/verify-install.cjs <version>
+NODE_AUTH_TOKEN=<github-token> sh scripts/verify-install.sh <version>
 ```
 
 ## 支援平台

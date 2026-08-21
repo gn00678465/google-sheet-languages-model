@@ -106,3 +106,15 @@ adrs: [0001, 0002, 0005]
 - JS 測試改用 Node 內建 `node:test`（`.cjs`）而非 vitest：vitest/esbuild 帶平台二進位，無法在 alpine／arm64 容器裡沿用 host 的 `node_modules`；`node:test` 讓容器測試零依賴。根目錄舊實作仍用 vitest。
 - `bin/gslm.js --version` 印 npm 套件版本（非 Rust core 版本），但仍會先載入 binding 以證明呼叫鏈；`version()` API 回報 core 版本。
 - `napi prepublish --dry-run` 不會寫入 `optionalDependencies`，因此 PR 上的 `npm publish --dry-run` 輸出不含平台子套件清單；真正發佈時才會有。
+
+### 2026-08-21 code review 後的修正
+
+- **版本來源**：CI 不再於發佈時改寫版本；`packages/gslm/package.json` 的 `version` 為唯一真相，tag `napi-v<version>` 必須相符。`bump.config.ts` 改為只 bump 該檔並打 `napi-v` tag，舊 `publish.yml` 刪除。`version()` 透過 `build.rs` 讀 package.json，與 `gslm --version` 一致；Cargo crate 版本維持 0.0.0（不發佈到 crates.io）。
+- **loader 版本**：napi 產生的 `index.js` 內含套件版本檢查，故 publish job 改用 linux-gnu build job 上傳的 `index.js`/`index.d.ts`，不用 repo 內可能過期的副本。
+- 移除 `prepublishOnly`（會在 `npm publish` 時二次執行 `napi prepublish`，對 GitHub Packages 的 409 訊息不相容而失敗），CI 明確呼叫 `napi prepublish` 後 `npm publish --ignore-scripts`。
+- `node --test` 的 glob 在 Node 20 不支援，改為明列測試檔。
+- `dtolnay/rust-toolchain@stable` 會覆寫 `rust-toolchain.toml`，改釘 `@1.97`。
+- **陣列**：`flatten` 明確拒絕陣列（`ArrayNotSupported`，帶出 key 路徑）。舊 TS 會攤成 `days.0`，但其 `flatToNest` 又拒絕數字 key，陣列從未能完整往返；CONTEXT.md 的 Key 定義亦不允許數字段。
+- `verify-install.cjs` 改為檢查 `require.cache` 中實際載入的 `.node` 是否位於唯一安裝的平台子套件內，不再自行推導 libc。
+- `bin/gslm.js` 改用 `process.exitCode`，避免 macOS pipe 下 stdout 未 flush 即退出。
+- 兩個 verify-install job 共用 `scripts/verify-install.sh`，並補上 linux arm64 gnu/musl。
