@@ -173,7 +173,7 @@ jobs:
         with:
           name: bindings-${{ matrix.settings.target }}
           path: ${{ env.PKG_DIR }}
-      - name: Test in container (no node_modules needed: tests use node:test)
+      - name: Test in container (tests use node:test, no node_modules needed)
         run: |
           docker run --rm --platform ${{ matrix.settings.platform }} \
             -v "${{ github.workspace }}:/build" -w /build/${{ env.PKG_DIR }} \
