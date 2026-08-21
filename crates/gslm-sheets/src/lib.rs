@@ -7,7 +7,7 @@ mod error;
 mod range;
 
 pub use auth::{Credentials, TokenProvider};
-pub use client::{SheetsClient, SheetsClientBuilder};
+pub use client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_TIMEOUT, SheetsClient, SheetsClientBuilder};
 pub use error::SheetsError;
 pub use gslm_core::Table;
 

@@ -99,7 +99,7 @@ napi 層暴露 `SheetsClient` class，方法回傳 Promise；憑證與 base URL 
 - **range**：tab 名稱依 A1 notation 規則一律以單引號包住、內部單引號寫成兩個單引號；清除與讀取用整個 tab（`'name'`），寫入用 `'name'!A1`。組好的 range 再做 URL path 編碼。
 - 所有請求帶 `Authorization: Bearer <token>`；token 由 provider 取得並快取，401 時清除快取重取一次後才報錯。
 - 不做自動重試（429/5xx 只分類為暫時性）；重試策略留給 CLI 層。
-- 逾時：連線 10 秒、整體請求 60 秒。
+- 逾時：預設連線 10 秒、整體請求 60 秒，builder 可覆寫（`connect_timeout` / `timeout`）。
 - User-Agent 含套件名與版本。
 
 ### 錯誤
@@ -154,7 +154,9 @@ napi 層暴露 `SheetsClient` class，方法回傳 Promise；憑證與 base URL 
 - 新 crate `gslm-sheets`：`SheetsClient::builder(creds).base_url(..).token_provider(..).build()`；`read_tab` / `write_tab`；`SheetsError` 含 `code()` 與 `is_transient()`。Rust 測試：10 unit + 13 integration（wiremock）+ 1 `#[ignore]` live。
 - **napi 的 `async fn` 不支援自訂 error status 型別**（`Error<S>` 只能用在同步函式），因此 `error.code` 無法從 Rust 直接設定。解法：Rust 端訊息帶 `[CODE] ` 前綴；napi 產生的檔改名 `binding.js` / `binding.d.ts`，手寫 `index.js`（約 40 行）包裝 `SheetsClient` 把前綴轉成 `code` 並去除，`index.d.ts` 手寫 re-export 並加上 `SheetsErrorCode` union 與 `SheetsError` 介面。其他函式原樣 re-export。
 - `gcp_auth` 會在建構時即解析 RSA 私鑰並要求 `token_uri` 欄位，因此測試夾具是一把本機產生的拋棄式 RSA key（`tests/fixtures/service-account.json`，附 README 說明）。
-- `gcp_auth` 沒有暴露「清除快取」的 API，`TokenProvider::invalidate` 對它是 no-op；401 重試一次仍會走 gcp_auth 自身的過期判斷。靜態 token 與測試用 provider 則可真正輪替。
+- `gcp_auth` 沒有暴露「清除快取」的 API，`TokenProvider::invalidate` 改為以保存的憑證來源（SA JSON 或 ADC）重建 provider，讓 401 重試真的拿到新 token；`StaticToken` 無法更新，`invalidate` 仍為 no-op（錯誤以 `Auth` 呈現）。
 - `FORMATTED_VALUE` 回傳的非字串儲存格（數字、布林）以 JSON 字面值字串化；`null` 為空字串。
 - JS 測試 5 個（`node:http` fixture server + `accessToken`），在 CI 每個平台執行，驗證 napi 內的 tokio runtime。CI 的 `js-loader` artifact 改上傳 `binding.js` / `binding.d.ts`。
+- **code review 後續**（2026-08-22）：修正 (1) `invalidate` 對 gcp_auth 為 no-op → 重建 provider；(2) `install_default()` 結果被忽略 → 僅在 `CryptoProvider::get_default()` 為 `None` 時才安裝 ring，尊重宿主程序已安裝的 provider；(3) 逾時硬編碼 → builder 可覆寫並補測試。
+- **未處理（記錄為後續）**：clear→PUT 非原子。原子替代方案為 `spreadsheets.batchUpdate` + `updateCells`（gridRange 只給數字 `sheetId`，需先 `spreadsheets.get?fields=sheets.properties` 由 tab 名查出 id）。目前維持兩步並以 `WriteAfterClearFailed` 標示，若使用者回報中斷造成空表，再開 spec 改為 batchUpdate。
 - musl 根憑證問題在本票未觸發（測試走 HTTP，不經 TLS），首個 beta 的 live 驗證才會碰到；若失敗依 spec 改 `webpki-roots`。

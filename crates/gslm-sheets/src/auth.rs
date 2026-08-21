@@ -7,6 +7,7 @@ use crate::error::SheetsError;
 use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Where the access token comes from.
 #[derive(Debug, Clone)]
@@ -53,9 +54,45 @@ impl TokenProvider for StaticToken {
     async fn invalidate(&self) {}
 }
 
+/// How to (re)build the underlying `gcp_auth` provider. Kept so that
+/// `invalidate` can drop the cached token by constructing a fresh provider.
+enum GcpSource {
+    ServiceAccountJson(String),
+    ApplicationDefault,
+}
+
+impl GcpSource {
+    async fn provider(&self) -> Result<Arc<dyn gcp_auth::TokenProvider>, SheetsError> {
+        match self {
+            GcpSource::ServiceAccountJson(raw) => {
+                let sa = gcp_auth::CustomServiceAccount::from_json(raw)
+                    .map_err(|e| SheetsError::Credentials(e.to_string()))?;
+                Ok(Arc::new(sa))
+            }
+            GcpSource::ApplicationDefault => gcp_auth::provider().await.map_err(|e| {
+                SheetsError::Credentials(format!(
+                    "application default credentials unavailable: {e}"
+                ))
+            }),
+        }
+    }
+}
+
 struct GcpAuth {
-    inner: Arc<dyn gcp_auth::TokenProvider>,
+    source: GcpSource,
+    inner: RwLock<Arc<dyn gcp_auth::TokenProvider>>,
     email: Option<String>,
+}
+
+impl GcpAuth {
+    async fn new(source: GcpSource, email: Option<String>) -> Result<Self, SheetsError> {
+        let inner = source.provider().await?;
+        Ok(GcpAuth {
+            source,
+            inner: RwLock::new(inner),
+            email,
+        })
+    }
 }
 
 impl std::fmt::Debug for GcpAuth {
@@ -69,17 +106,20 @@ impl std::fmt::Debug for GcpAuth {
 #[async_trait]
 impl TokenProvider for GcpAuth {
     async fn token(&self) -> Result<String, SheetsError> {
-        let token = self
-            .inner
+        let inner = self.inner.read().await.clone();
+        let token = inner
             .token(&[SCOPE])
             .await
             .map_err(|e| SheetsError::Auth(e.to_string()))?;
         Ok(token.as_str().to_string())
     }
 
+    /// `gcp_auth` exposes no way to drop its cached token, so rebuild the
+    /// provider from the stored source; the next `token()` fetches anew.
     async fn invalidate(&self) {
-        // gcp_auth refreshes expired tokens itself; an explicit invalidation
-        // hook is not exposed, so a 401 simply retries through the cache.
+        if let Ok(fresh) = self.source.provider().await {
+            *self.inner.write().await = fresh;
+        }
     }
 
     fn service_account_email(&self) -> Option<String> {
@@ -126,33 +166,22 @@ pub(crate) async fn provider_for(
         }
         Credentials::ServiceAccountJson(raw) => {
             let email = validate_service_account_json(&raw)?;
-            let sa = gcp_auth::CustomServiceAccount::from_json(&raw)
-                .map_err(|e| SheetsError::Credentials(e.to_string()))?;
-            Ok(Arc::new(GcpAuth {
-                inner: Arc::new(sa),
-                email: Some(email),
-            }))
+            Ok(Arc::new(
+                GcpAuth::new(GcpSource::ServiceAccountJson(raw), Some(email)).await?,
+            ))
         }
         Credentials::ServiceAccountFile(path) => {
             let raw = std::fs::read_to_string(&path).map_err(|e| {
                 SheetsError::Credentials(format!("cannot read {}: {e}", path.display()))
             })?;
             let email = validate_service_account_json(&raw)?;
-            let sa = gcp_auth::CustomServiceAccount::from_json(&raw)
-                .map_err(|e| SheetsError::Credentials(e.to_string()))?;
-            Ok(Arc::new(GcpAuth {
-                inner: Arc::new(sa),
-                email: Some(email),
-            }))
+            Ok(Arc::new(
+                GcpAuth::new(GcpSource::ServiceAccountJson(raw), Some(email)).await?,
+            ))
         }
-        Credentials::ApplicationDefault => {
-            let inner = gcp_auth::provider().await.map_err(|e| {
-                SheetsError::Credentials(format!(
-                    "application default credentials unavailable: {e}"
-                ))
-            })?;
-            Ok(Arc::new(GcpAuth { inner, email: None }))
-        }
+        Credentials::ApplicationDefault => Ok(Arc::new(
+            GcpAuth::new(GcpSource::ApplicationDefault, None).await?,
+        )),
     }
 }
 
@@ -187,6 +216,19 @@ mod tests {
         let p = provider_for(Credentials::ServiceAccountJson(SA_JSON.into()))
             .await
             .unwrap();
+        assert_eq!(
+            p.service_account_email().as_deref(),
+            Some("bot@proj.iam.gserviceaccount.com")
+        );
+    }
+
+    #[tokio::test]
+    async fn invalidate_rebuilds_gcp_provider() {
+        let p = provider_for(Credentials::ServiceAccountJson(SA_JSON.into()))
+            .await
+            .unwrap();
+        // Must not panic or deadlock; the provider is swapped for a fresh one.
+        p.invalidate().await;
         assert_eq!(
             p.service_account_email().as_deref(),
             Some("bot@proj.iam.gserviceaccount.com")

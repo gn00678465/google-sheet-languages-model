@@ -376,3 +376,27 @@ async fn live_round_trip() {
         ])
     );
 }
+
+// ---------- timeouts
+
+#[tokio::test]
+async fn request_timeout_is_configurable_and_reported_as_network_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({ "values": [] }))
+                .set_delay(std::time::Duration::from_millis(500)),
+        )
+        .mount(&server)
+        .await;
+
+    let c = SheetsClient::builder(Credentials::AccessToken("tok-1".into()))
+        .base_url(server.uri())
+        .timeout(std::time::Duration::from_millis(50))
+        .build()
+        .await
+        .unwrap();
+    let err = c.read_tab(SHEET, "i18n").await.unwrap_err();
+    assert!(matches!(err, SheetsError::Network(_)), "{err:?}");
+}

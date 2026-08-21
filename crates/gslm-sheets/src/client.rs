@@ -14,7 +14,14 @@ pub struct SheetsClientBuilder {
     credentials: Credentials,
     base_url: String,
     provider: Option<Arc<dyn TokenProvider>>,
+    connect_timeout: Duration,
+    timeout: Duration,
 }
+
+/// Default TCP/TLS connect timeout.
+pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Default whole-request timeout (connect + send + receive).
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 
 impl SheetsClientBuilder {
     pub fn new(credentials: Credentials) -> Self {
@@ -22,7 +29,23 @@ impl SheetsClientBuilder {
             credentials,
             base_url: DEFAULT_BASE_URL.to_string(),
             provider: None,
+            connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            timeout: DEFAULT_TIMEOUT,
         }
+    }
+
+    /// Override the connect timeout (default 10s).
+    pub fn connect_timeout(mut self, d: Duration) -> Self {
+        self.connect_timeout = d;
+        self
+    }
+
+    /// Override the whole-request timeout (default 60s). A timeout during the
+    /// write step of [`SheetsClient::write_tab`] surfaces as
+    /// [`SheetsError::WriteAfterClearFailed`].
+    pub fn timeout(mut self, d: Duration) -> Self {
+        self.timeout = d;
+        self
     }
 
     /// Override the API origin (e.g. `http://127.0.0.1:1234`).
@@ -38,8 +61,12 @@ impl SheetsClientBuilder {
     }
 
     pub async fn build(self) -> Result<SheetsClient, SheetsError> {
-        // Installing twice is harmless: the second call just reports failure.
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        // Respect a provider the host process already installed (e.g.
+        // aws-lc-rs); only fall back to ring when nothing is registered. A
+        // concurrent install racing here is benign: either one works.
+        if rustls::crypto::CryptoProvider::get_default().is_none() {
+            let _ = rustls::crypto::ring::default_provider().install_default();
+        }
 
         let provider = match self.provider {
             Some(p) => p,
@@ -47,8 +74,8 @@ impl SheetsClientBuilder {
         };
         let http = reqwest::Client::builder()
             .user_agent(USER_AGENT)
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(60))
+            .connect_timeout(self.connect_timeout)
+            .timeout(self.timeout)
             .build()
             .map_err(|e| SheetsError::Network(e.to_string()))?;
         Ok(SheetsClient {
