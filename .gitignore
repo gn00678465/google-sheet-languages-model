@@ -7,3 +7,7 @@ tmp
 
 # Release artifacts
 .release-it.json
+
+# Rust
+target/
+artifacts/

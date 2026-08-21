@@ -1,39 +1,21 @@
 {
-  "name": "@gn00678465/google-sheet-languages-model",
+  "name": "google-sheet-languages-model-workspace",
+  "private": true,
   "version": "0.5.1",
+  "description": "Workspace root. The publishable package lives in packages/gslm; the legacy TypeScript implementation remains at the root until it is fully ported (see docs/specs/0001-napi-workspace-skeleton).",
   "repository": {
     "type": "git",
     "url": "https://github.com/gn00678465/google-sheet-languages-model.git"
   },
   "author": "neil585456525 <neil585456525@gmail.com>",
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "public"
-  },
   "type": "module",
   "license": "MIT",
-  "keywords": [
-    "i18n",
-    "google-sheet",
-    "google-sheet-i18n",
-    "javascript",
-    "typescript",
-    "cli"
-  ],
-  "bin": {
-    "gslm": "./dist/cli.js"
-  },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    }
-  },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "scripts": {
+    "build:napi": "pnpm -C packages/gslm build",
+    "build:napi:debug": "pnpm -C packages/gslm build:debug",
+    "test:napi": "pnpm -C packages/gslm test",
+    "test:rust": "cargo test --workspace",
+    "lint:rust": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "tsdown --watch",
