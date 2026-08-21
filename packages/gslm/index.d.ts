@@ -9,5 +9,8 @@
  */
 export declare function flatten(value: any, separator?: string | undefined | null): Record<string, any>
 
-/** Version of the underlying Rust core. */
+/**
+ * Version of the installed gslm package (read from package.json at build
+ * time, so it always matches what `npm install` resolved).
+ */
 export declare function version(): string

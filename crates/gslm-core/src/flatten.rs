@@ -12,6 +12,8 @@ pub enum FlattenError {
     NumericKeySegment(String),
     #[error("separator must not be empty")]
     EmptySeparator,
+    #[error("arrays are not supported in catalogs (at key {0:?})")]
+    ArrayNotSupported(String),
 }
 
 /// Flatten a nested catalog into a single-level map whose keys are joined by
@@ -45,6 +47,7 @@ fn walk(
         };
         match child {
             Value::Object(inner) => walk(inner, separator, path, out)?,
+            Value::Array(_) => return Err(FlattenError::ArrayNotSupported(path)),
             leaf => {
                 out.insert(path, leaf.clone());
             }
@@ -134,6 +137,16 @@ mod tests {
         assert_eq!(
             flatten(&json!("s"), ".").unwrap_err(),
             FlattenError::NotAnObject("string")
+        );
+    }
+
+    #[test]
+    fn rejects_arrays_with_their_path() {
+        // Legacy TS flattened arrays into `days.0`, `days.1`, which its own
+        // unflatten then rejected as numeric keys; arrays never round-tripped.
+        assert_eq!(
+            flatten(&json!({"a": {"days": ["Mon", "Tue"]}}), ".").unwrap_err(),
+            FlattenError::ArrayNotSupported("a.days".into())
         );
     }
 

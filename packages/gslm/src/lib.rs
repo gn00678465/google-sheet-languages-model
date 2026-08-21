@@ -17,8 +17,9 @@ pub fn flatten(
     gslm_core::flatten(&value, separator).map_err(|e| Error::new(Status::InvalidArg, e.to_string()))
 }
 
-/// Version of the underlying Rust core.
+/// Version of the installed gslm package (read from package.json at build
+/// time, so it always matches what `npm install` resolved).
 #[napi]
 pub fn version() -> String {
-    gslm_core::VERSION.to_string()
+    env!("GSLM_PACKAGE_VERSION").to_string()
 }

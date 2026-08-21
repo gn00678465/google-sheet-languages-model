@@ -33,6 +33,10 @@ describe('flatten', () => {
     assert.throws(() => flatten('s'), /expected an object/)
   })
 
+  it('throws for arrays, naming the offending key', () => {
+    assert.throws(() => flatten({ days: ['Mon'] }), /arrays are not supported.*"days"/)
+  })
+
   it('throws for an empty separator', () => {
     assert.throws(() => flatten({ a: 'b' }, ''), /separator must not be empty/)
   })
