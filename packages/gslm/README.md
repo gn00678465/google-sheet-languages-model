@@ -24,7 +24,7 @@ node packages/gslm/bin/gslm.js --version
 
 ## 發佈
 
-`packages/gslm/package.json` 的 `version` 是唯一真相；tag 必須與它一致，否則 CI 拒絕發佈。正常流程是在 repo 根目錄執行 `pnpm release`（bumpp 會改這個檔、commit、打 `napi-v<version>` tag 並 push）。canary 可用 `pnpm release --preid canary prerelease`。
+`packages/gslm/package.json` 的 `version` 是唯一真相；tag 必須與它一致，否則 CI 拒絕發佈。正常流程是在 repo 根目錄執行 `pnpm release`（bumpp 會改這個檔、commit、打 `napi-v<version>` tag 並 push）。預發佈版用 `pnpm release --preid beta prerelease`（第一個 beta tag 同時是 ADR-0005 的 GitHub Packages 安裝驗證）。
 
 推送 tag `napi-v<version>` 會觸發 `.github/workflows/napi.yml`：
 

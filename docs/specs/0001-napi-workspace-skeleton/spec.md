@@ -1,5 +1,5 @@
 ---
-status: ready-for-agent
+status: done
 date: 2026-08-21
 adrs: [0001, 0002, 0005]
 ---
@@ -118,3 +118,9 @@ adrs: [0001, 0002, 0005]
 - `verify-install.cjs` 改為檢查 `require.cache` 中實際載入的 `.node` 是否位於唯一安裝的平台子套件內，不再自行推導 libc。
 - `bin/gslm.js` 改用 `process.exitCode`，避免 macOS pipe 下 stdout 未 flush 即退出。
 - 兩個 verify-install job 共用 `scripts/verify-install.sh`，並補上 linux arm64 gnu/musl。
+
+### 2026-08-21 CI 驗證結果與延後項
+
+- 分支 `rewrite/napi` 的 CI run [#32477775078](https://github.com/gn00678465/google-sheet-languages-model/actions/runs/32477775078) 全綠：lint、7 個 target build、21 個 test job（7 target × Node 20/22/24，含 alpine 與 arm64 容器）、publish dry-run（7 個 `.node` 正確組裝進 `npm/<platform>/`，主套件 tarball 6.1 kB）。
+- 途中修正兩個 CI 問題：step 名稱含 `: ` 導致 YAML 解析失敗；`rust-toolchain.toml` 的 `channel = "1.97"` 與 action 安裝的 `1.97.1` 被 rustup 視為不同 toolchain，交叉編譯 target 缺標準函式庫，改釘精確版本。
+- **維護者決定**：不發 canary。`verify-install`（ADR-0005 的 GitHub Packages `optionalDependencies` 驗證）延後到重構完成後，以第一個 `napi-v<version>-beta.1` tag 一次驗證。在此之前 ADR-0005 的風險視為未驗證。
