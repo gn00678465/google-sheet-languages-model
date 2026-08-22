@@ -706,6 +706,7 @@ module.exports.flatten = nativeBinding.flatten
 module.exports.loadConfig = nativeBinding.loadConfig
 module.exports.modelToSheet = nativeBinding.modelToSheet
 module.exports.orphanKeys = nativeBinding.orphanKeys
+module.exports.releaseConfigCredentials = nativeBinding.releaseConfigCredentials
 module.exports.sheetToModel = nativeBinding.sheetToModel
 module.exports.unflatten = nativeBinding.unflatten
 module.exports.version = nativeBinding.version

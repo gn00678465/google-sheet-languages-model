@@ -6,8 +6,34 @@ use gslm_config::{
 use gslm_core::Format;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
+use std::sync::{LazyLock, Mutex};
+
+static CREDENTIALS_BY_HANDLE: LazyLock<Mutex<HashMap<CredentialHandle, CredentialsSource>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CredentialHandle(String);
+
+impl CredentialHandle {
+    fn generate() -> Result<Self> {
+        let mut bytes = [0_u8; 16];
+        getrandom::fill(&mut bytes).map_err(|_| {
+            Error::new(
+                Status::GenericFailure,
+                "[CONFIG_INVALID] 無法建立憑證 handle",
+            )
+        })?;
+        Ok(Self(format!(
+            "gslm-credential-{}",
+            bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        )))
+    }
+}
 
 fn to_js(error: ConfigError) -> Error {
     Error::new(Status::InvalidArg, format!("[{}] {}", error.code(), error))
@@ -90,16 +116,17 @@ pub struct ConfigTarget {
     pub format: String,
     pub key_separator: String,
     pub credentials: ConfigCredentials,
+    /// Opaque, process-local handle used by [`SheetsClient::from_config`]. It
+    /// contains no credential data, but must be retained with this Target.
+    pub credential_handle: String,
 }
 
 /// Internal input for `SheetsClient.fromConfig`. It deliberately contains
-/// only credential metadata plus a non-secret `.env` path supplied by the JS
-/// wrapper; it is not the data returned by `loadConfig`.
+/// only the opaque credential handle returned by `loadConfig`.
 #[napi(object)]
 #[derive(Debug, Clone)]
 pub struct ConfigTargetForClient {
-    pub credentials: ConfigCredentials,
-    pub dotenv_path: Option<String>,
+    pub credential_handle: String,
 }
 
 /// Fully resolved config data that is safe to serialize or print.
@@ -132,9 +159,12 @@ impl From<CredentialsSource> for ConfigCredentials {
     }
 }
 
-impl From<ResolvedTarget> for ConfigTarget {
-    fn from(value: ResolvedTarget) -> Self {
-        Self {
+impl TryFrom<ResolvedTarget> for ConfigTarget {
+    type Error = Error;
+
+    fn try_from(value: ResolvedTarget) -> Result<Self> {
+        let credential_handle = register_credentials(&value.credentials)?;
+        Ok(Self {
             name: value.name,
             sheet: value.sheet,
             tab: value.tab,
@@ -146,19 +176,53 @@ impl From<ResolvedTarget> for ConfigTarget {
             },
             key_separator: value.key_separator,
             credentials: value.credentials.into(),
-        }
+            credential_handle: credential_handle.0,
+        })
     }
 }
 
-impl From<ResolvedConfig> for JsResolvedConfig {
-    fn from(value: ResolvedConfig) -> Self {
-        Self {
+fn register_credentials(credentials: &CredentialsSource) -> Result<CredentialHandle> {
+    let handle = CredentialHandle::generate()?;
+    CREDENTIALS_BY_HANDLE
+        .lock()
+        .expect("credential registry lock must not be poisoned")
+        .insert(handle.clone(), credentials.clone());
+    Ok(handle)
+}
+
+/// Resolve the process-local credential source attached to a Config Target.
+/// The returned value is never serialized across the N-API boundary.
+pub(crate) fn credentials_for_handle(handle: &str) -> Option<CredentialsSource> {
+    CREDENTIALS_BY_HANDLE
+        .lock()
+        .ok()
+        .and_then(|credentials| credentials.get(&CredentialHandle(handle.into())).cloned())
+}
+
+/// Drop credentials once JavaScript no longer retains the Target that owns
+/// this opaque handle. Unknown handles are intentionally harmless.
+#[napi]
+pub fn release_config_credentials(handle: String) {
+    if let Ok(mut credentials) = CREDENTIALS_BY_HANDLE.lock() {
+        credentials.remove(&CredentialHandle(handle));
+    }
+}
+
+impl TryFrom<ResolvedConfig> for JsResolvedConfig {
+    type Error = Error;
+
+    fn try_from(value: ResolvedConfig) -> Result<Self> {
+        Ok(Self {
             config_path: value
                 .config_path
                 .map(|path| path.to_string_lossy().into_owned()),
-            targets: value.targets.into_iter().map(Into::into).collect(),
+            targets: value
+                .targets
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<Vec<_>>>()?,
             warnings: value.warnings,
-        }
+        })
     }
 }
 
@@ -183,7 +247,7 @@ pub fn load_config(options: Option<LoadConfigOptions>) -> Result<JsResolvedConfi
         .unwrap_or_default();
     native.targets = options.targets;
     native.load_dotenv = options.load_dotenv.unwrap_or(true);
-    gslm_config::load(native).map(Into::into).map_err(to_js)
+    gslm_config::load(native).map_err(to_js)?.try_into()
 }
 
 /// JSON Schema draft 2020-12 generated from the Rust raw-config types.

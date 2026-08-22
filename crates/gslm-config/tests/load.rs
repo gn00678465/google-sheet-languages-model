@@ -182,6 +182,27 @@ fn rejects_legacy_and_invalid_config_with_stable_codes() {
 }
 
 #[test]
+fn keeps_dotenv_parse_errors_secret_free() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        "version = 1\nsheet = \"id\"\ntab = \"Main\"\nlocales = [\"en\"]\npath = \"{locale}.json\"\n",
+    )
+    .unwrap();
+    let secret = "never-show-this-dotenv-secret";
+    fs::write(
+        project.path().join(".env"),
+        format!("SERVICE_ACCOUNT=\"{secret}\n"),
+    )
+    .unwrap();
+
+    let error = load(options(project.path())).unwrap_err();
+
+    assert_eq!(error.code(), "CONFIG_PARSE");
+    assert!(!error.to_string().contains(secret));
+}
+
+#[test]
 fn expands_targets_and_requires_one_target_for_field_overrides() {
     let project = tempdir().unwrap();
     fs::write(
@@ -224,6 +245,18 @@ key_separator = "/"
     assert_eq!(config.targets[0].sheet, "override");
     assert_eq!(config.targets[0].format, gslm_core::Format::Flat);
     assert_eq!(config.targets[0].key_separator, "/");
+
+    let mut opts = options(project.path());
+    opts.overrides = Overrides {
+        credentials: Some("credentials/service-account.json".into()),
+        ..Overrides::default()
+    };
+    let config = load(opts).unwrap();
+    assert_eq!(config.targets.len(), 2);
+    assert!(config.targets.iter().all(|target| {
+        target.credentials
+            == CredentialsSource::File(project.path().join("credentials/service-account.json"))
+    }));
 }
 
 #[test]
@@ -262,6 +295,119 @@ fn accepts_complete_cli_mode_but_validates_target_values() {
 }
 
 #[test]
+fn complete_cli_mode_precedes_legacy_discovery() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.config.mjs"),
+        "export default {}\n",
+    )
+    .unwrap();
+    let mut opts = options(project.path());
+    opts.overrides = Overrides {
+        sheet: Some("id".into()),
+        tab: Some("Main".into()),
+        locales: Some(vec!["en".into()]),
+        path: Some("locales/{locale}.json".into()),
+        ..Overrides::default()
+    };
+
+    let config = load(opts).unwrap();
+
+    assert_eq!(config.config_path, None);
+    assert_eq!(config.targets[0].name, "cli");
+}
+
+#[test]
+fn rejects_empty_locale_and_treats_empty_environment_values_as_unset() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        "version = 1\nsheet = \"from-file\"\ntab = \"Main\"\nlocales = [\"en\"]\npath = \"{locale}.json\"\n",
+    )
+    .unwrap();
+    let mut opts = options(project.path());
+    opts.env = BTreeMap::from([
+        ("GSLM_SHEET".into(), String::new()),
+        ("GSLM_LOCALES".into(), String::new()),
+        ("GSLM_CREDENTIALS".into(), String::new()),
+        ("GSLM_CREDENTIALS_JSON".into(), String::new()),
+    ]);
+    let config = load(opts).unwrap();
+    assert_eq!(config.targets[0].sheet, "from-file");
+    assert_eq!(config.targets[0].locales, ["en"]);
+    assert_eq!(
+        config.targets[0].credentials,
+        CredentialsSource::ApplicationDefault
+    );
+
+    fs::write(
+        project.path().join("gslm.toml"),
+        "version = 1\nsheet = \"id\"\ntab = \"Main\"\nlocales = [\"en\"]\npath = \"{locale}.json\"\n[credentials]\nenv = \"SERVICE_ACCOUNT\"\n",
+    )
+    .unwrap();
+    fs::write(project.path().join(".env"), "SERVICE_ACCOUNT=from-dotenv\n").unwrap();
+    let mut opts = options(project.path());
+    opts.env.insert("SERVICE_ACCOUNT".into(), String::new());
+    let config = load(opts).unwrap();
+    assert_eq!(
+        config.targets[0].credentials,
+        CredentialsSource::Json {
+            env_name: "SERVICE_ACCOUNT".into(),
+            value: "from-dotenv".into(),
+        }
+    );
+
+    fs::write(
+        project.path().join("gslm.toml"),
+        "version = 1\nsheet = \"id\"\ntab = \"Main\"\nlocales = [\"\"]\npath = \"{locale}.json\"\n",
+    )
+    .unwrap();
+    let error = load(options(project.path())).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_INVALID");
+    assert!(error.to_string().contains("不可有空白 Locale"));
+}
+
+#[test]
+fn deduplicates_requested_targets_and_rejects_selection_without_config() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        r#"version = 1
+sheet = "shared"
+locales = ["en"]
+
+[[targets]]
+name = "web"
+tab = "Web"
+path = "web/{locale}.json"
+
+[[targets]]
+name = "mobile"
+tab = "Mobile"
+path = "mobile/{locale}.json"
+"#,
+    )
+    .unwrap();
+    let mut opts = options(project.path());
+    opts.targets = Some(vec!["mobile".into(), "web".into(), "mobile".into()]);
+    let config = load(opts).unwrap();
+    assert_eq!(
+        config
+            .targets
+            .iter()
+            .map(|target| target.name.as_str())
+            .collect::<Vec<_>>(),
+        ["mobile", "web"]
+    );
+
+    let no_config = tempdir().unwrap();
+    let mut opts = options(no_config.path());
+    opts.targets = Some(vec!["web".into()]);
+    let error = load(opts).unwrap_err();
+    assert!(matches!(error, ConfigError::NotFound { .. }));
+}
+
+#[test]
 fn generated_schema_matches_the_checked_in_v1_contract() {
     let generated = format!("{}\n", serde_json::to_string_pretty(&schema()).unwrap());
     let checked_in = include_str!("../../../docs/schema/v1.json");
@@ -296,6 +442,13 @@ fn generated_schema_matches_the_checked_in_v1_contract() {
         "sheet": "sheet-id",
         "tab": "Main",
         "locales": [],
+        "path": "{locale}.json"
+    })));
+    assert!(!validator.is_valid(&json!({
+        "version": 1,
+        "sheet": "sheet-id",
+        "tab": "Main",
+        "locales": [""],
         "path": "{locale}.json"
     })));
     assert!(!validator.is_valid(&json!({

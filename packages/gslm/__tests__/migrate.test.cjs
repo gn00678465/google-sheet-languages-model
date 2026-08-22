@@ -62,6 +62,75 @@ test('migrateLegacyConfig protects inline credentials and documents defaults', (
   ])
 
   assert.throws(() => migrateLegacyConfig(null), /物件/)
+  assert.throws(
+    () =>
+      migrateLegacyConfig({
+        sheetId: 'id',
+        sheetTitle: 'Main',
+        languages: [''],
+        directory: './i18n',
+      }),
+    /非空字串陣列/,
+  )
+})
+
+test('migrateLegacyConfig emits valid TOML basic strings for controls and rejects lone surrogates', () => {
+  const value = 'line\u0000tab\tbreak\nquote"slash\\delete\u007f'
+  const result = migrateLegacyConfig({
+    sheetId: value,
+    sheetTitle: value,
+    languages: ['en'],
+    directory: './i18n',
+  })
+  assert.match(result.toml, /\\u0000/)
+  assert.match(result.toml, /\\t/)
+  assert.match(result.toml, /\\n/)
+  assert.match(result.toml, /\\"/)
+  assert.match(result.toml, /\\\\/)
+  assert.match(result.toml, /\\u007f/)
+
+  const directory = tempdir()
+  fs.writeFileSync(path.join(directory, 'gslm.toml'), result.toml)
+  const config = loadConfig({ cwd: directory, loadDotenv: false })
+  assert.equal(config.targets[0].sheet, value)
+  assert.equal(config.targets[0].tab, value)
+
+  assert.throws(
+    () =>
+      migrateLegacyConfig({
+        sheetId: 'id',
+        sheetTitle: '\ud800',
+        languages: ['en'],
+        directory: './i18n',
+      }),
+    /無法表示/,
+  )
+})
+
+test('migrate command runs without a native binding', () => {
+  const packageRoot = tempdir()
+  const binDirectory = path.join(packageRoot, 'bin')
+  fs.mkdirSync(binDirectory)
+  fs.copyFileSync(path.join(__dirname, '..', 'bin', 'gslm.js'), path.join(binDirectory, 'gslm.js'))
+  fs.copyFileSync(path.join(__dirname, '..', 'migrate.js'), path.join(packageRoot, 'migrate.js'))
+  fs.copyFileSync(path.join(__dirname, '..', 'index.js'), path.join(packageRoot, 'index.js'))
+  fs.writeFileSync(
+    path.join(packageRoot, 'gslm.config.cjs'),
+    "module.exports = { sheetId: 'id', sheetTitle: 'Main', languages: ['en'], directory: 'i18n' }\n",
+  )
+
+  const output = execFileSync(process.execPath, [path.join(binDirectory, 'gslm.js'), 'migrate'], {
+    cwd: packageRoot,
+    encoding: 'utf8',
+  })
+
+  assert.match(output, /sheet = "id"/)
+
+  const { migrateLegacyConfig: sdkMigrate } = require(path.join(packageRoot, 'index.js'))
+  assert.match(
+    sdkMigrate({ sheetId: 'id', sheetTitle: 'Main', languages: ['en'], directory: 'i18n' }).toml,
+    /sheet = "id"/,
+  )
 })
 
 test('gslm migrate writes a loadable TOML config only when requested', () => {
@@ -91,7 +160,9 @@ test('gslm migrate writes a loadable TOML config only when requested', () => {
     encoding: 'utf8',
   })
   const config = loadConfig({ cwd: directory, loadDotenv: false })
-  assert.deepEqual(config.targets[0], {
+  assert.equal('credentialHandle' in config.targets[0], false)
+  const target = config.targets[0]
+  assert.deepEqual(target, {
     name: 'default',
     sheet: 'sheet-id',
     tab: 'Main',

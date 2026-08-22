@@ -29,8 +29,10 @@ test('loadConfig resolves a config file into safe SDK data', () => {
   })
 
   assert.equal(config.configPath, path.join(directory, 'gslm.toml'))
-  assert.deepEqual(config.targets, [
-    {
+  assert.equal('credentialHandle' in config.targets[0], false)
+  assert.equal(JSON.stringify(config).includes('gslm-credential-'), false)
+  const target = config.targets[0]
+  assert.deepEqual(target, {
       name: 'default',
       sheet: 'sheet-id',
       tab: 'Main',
@@ -39,8 +41,7 @@ test('loadConfig resolves a config file into safe SDK data', () => {
       format: 'nest',
       keySeparator: '.',
       credentials: { kind: 'json', env: 'GSLM_TEST_CONFIG_JSON' },
-    },
-  ])
+  })
 })
 
 test('loadConfig surfaces stable ConfigError codes and configSchema has its id', () => {
@@ -57,7 +58,7 @@ test('loadConfig surfaces stable ConfigError codes and configSchema has its id',
   )
 })
 
-test('SheetsClient.fromConfig can re-read JSON credentials loaded from cwd .env', async () => {
+test('SheetsClient.fromConfig retains loadConfig credential values without exposing them', async () => {
   const directory = tempdir()
   fs.writeFileSync(
     path.join(directory, 'gslm.toml'),
@@ -69,12 +70,12 @@ test('SheetsClient.fromConfig can re-read JSON credentials loaded from cwd .env'
       '[credentials]\n' +
       'env = "GSLM_TEST_CONFIG_DOTENV_JSON"\n',
   )
-  fs.writeFileSync(
-    path.join(directory, '.env'),
-    "GSLM_TEST_CONFIG_DOTENV_JSON='{\"type\":\"service_account\"}'\n",
-  )
-
-  const config = loadConfig({ cwd: directory })
+  const config = loadConfig({
+    cwd: directory,
+    loadDotenv: false,
+    env: { GSLM_TEST_CONFIG_DOTENV_JSON: '{"type":"service_account"}' },
+  })
+  assert.doesNotMatch(JSON.stringify(config), /service_account/)
   await assert.rejects(
     SheetsClient.fromConfig(config.targets[0]),
     (error) =>
@@ -82,36 +83,37 @@ test('SheetsClient.fromConfig can re-read JSON credentials loaded from cwd .env'
       error.code === 'CREDENTIALS' &&
       /missing client_email/.test(error.message),
   )
-
-  const unrelated = tempdir()
-  fs.writeFileSync(
-    path.join(unrelated, 'gslm.toml'),
-    'version = 1\n' +
-      'sheet = "sheet-id"\n' +
-      'tab = "Main"\n' +
-      'locales = ["en"]\n' +
-      'path = "locales/{locale}.json"\n' +
-      '[credentials]\n' +
-      'env = "GSLM_TEST_CONFIG_DOTENV_JSON"\n',
-  )
-  assert.throws(
-    () => loadConfig({ cwd: unrelated }),
-    (error) =>
-      error &&
-      error.code === 'CONFIG_INVALID' &&
-      /GSLM_TEST_CONFIG_DOTENV_JSON/.test(error.message),
+  await assert.rejects(
+    SheetsClient.fromConfig(JSON.parse(JSON.stringify(config.targets[0]))),
+    (error) => error && error.code === 'CREDENTIALS' && /直接使用 loadConfig/.test(error.message),
   )
 
-  const withoutDotenv = loadConfig({
+  const overridden = loadConfig({
     cwd: directory,
     loadDotenv: false,
-    env: { GSLM_TEST_CONFIG_DOTENV_JSON: '{"type":"service_account"}' },
+    overrides: { credentialsJson: '{"type":"service_account"}' },
   })
   await assert.rejects(
-    SheetsClient.fromConfig(withoutDotenv.targets[0]),
+    SheetsClient.fromConfig(overridden.targets[0]),
     (error) =>
       error &&
       error.code === 'CREDENTIALS' &&
-      /GSLM_TEST_CONFIG_DOTENV_JSON/.test(error.message),
+      /missing client_email/.test(error.message),
+  )
+})
+
+test('loadConfig never echoes a malformed dotenv secret', () => {
+  const directory = tempdir()
+  fs.writeFileSync(
+    path.join(directory, 'gslm.toml'),
+    'version = 1\nsheet = "sheet-id"\ntab = "Main"\nlocales = ["en"]\npath = "locales/{locale}.json"\n',
+  )
+  const secret = 'never-show-this-dotenv-secret'
+  fs.writeFileSync(path.join(directory, '.env'), `SERVICE_ACCOUNT="${secret}\n`)
+
+  assert.throws(
+    () => loadConfig({ cwd: directory }),
+    (error) =>
+      error && error.code === 'CONFIG_PARSE' && !error.message.includes(secret),
   )
 })

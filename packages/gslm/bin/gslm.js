@@ -5,7 +5,7 @@
 const { existsSync, readFileSync, writeFileSync } = require('node:fs')
 const { dirname, extname, resolve } = require('node:path')
 const { pathToFileURL } = require('node:url')
-const { migrateLegacyConfig, version } = require('../index.js')
+const { migrateLegacyConfig } = require('../migrate.js')
 
 const args = process.argv.slice(2)
 
@@ -92,6 +92,7 @@ async function migrate(argv) {
 async function main() {
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v')) {
     // version() comes from the Rust binding, so this proves bin → napi → Rust.
+    const { version } = require('../index.js')
     process.stdout.write(`${version()}\n`)
     return
   }

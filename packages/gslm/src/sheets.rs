@@ -1,5 +1,6 @@
 //! napi wrapper over `gslm_sheets::SheetsClient`.
 
+use gslm_config::CredentialsSource;
 use gslm_sheets::{Credentials, SheetsError};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -63,49 +64,13 @@ fn credentials_from(opts: Option<CredentialsOptions>) -> Result<Credentials> {
 }
 
 fn credentials_from_target(target: &crate::config::ConfigTargetForClient) -> Result<Credentials> {
-    match target.credentials.kind.as_str() {
-        "file" => target
-            .credentials
-            .path
-            .as_ref()
-            .map(|path| Credentials::ServiceAccountFile(path.into()))
-            .ok_or_else(|| credentials_error("config Target 的 file credentials 缺少 path")),
-        "json" => {
-            let env_name =
-                target.credentials.env.as_ref().ok_or_else(|| {
-                    credentials_error("config Target 的 json credentials 缺少 env")
-                })?;
-            let from_env = std::env::var(env_name)
-                .ok()
-                .filter(|value| !value.is_empty());
-            let json = match from_env {
-                Some(value) => Some(value),
-                None => dotenv_value(target.dotenv_path.as_deref(), env_name)?,
-            }
-            .ok_or_else(|| credentials_error(&format!("缺少或為空的環境變數 {env_name}")))?;
-            Ok(Credentials::ServiceAccountJson(json))
-        }
-        "adc" => Ok(Credentials::ApplicationDefault),
-        kind => Err(credentials_error(&format!(
-            "config Target 的 credentials.kind 不支援 `{kind}`"
-        ))),
+    let source = crate::config::credentials_for_handle(&target.credential_handle)
+        .ok_or_else(|| credentials_error("config Target 的 credentialHandle 無效或已過期"))?;
+    match source {
+        CredentialsSource::File(path) => Ok(Credentials::ServiceAccountFile(path)),
+        CredentialsSource::Json { value, .. } => Ok(Credentials::ServiceAccountJson(value)),
+        CredentialsSource::ApplicationDefault => Ok(Credentials::ApplicationDefault),
     }
-}
-
-fn dotenv_value(path: Option<&str>, env_name: &str) -> Result<Option<String>> {
-    let Some(path) = path.map(std::path::Path::new).filter(|path| path.is_file()) else {
-        return Ok(None);
-    };
-    let values = dotenvy::from_path_iter(path)
-        .map_err(|error| credentials_error(&format!("無法讀取 {}: {error}", path.display())))?;
-    for value in values {
-        let (name, value) = value
-            .map_err(|error| credentials_error(&format!("無法解析 {}: {error}", path.display())))?;
-        if name == env_name && !value.is_empty() {
-            return Ok(Some(value));
-        }
-    }
-    Ok(None)
 }
 
 async fn build_client(credentials: Credentials, base_url: Option<String>) -> Result<SheetsClient> {
@@ -134,9 +99,8 @@ impl SheetsClient {
         build_client(creds, options.base_url).await
     }
 
-    /// Create a client from a Target returned by `loadConfig`. JSON
-    /// credentials are read from their named environment variable here, so no
-    /// secret crosses the JavaScript boundary.
+    /// Create a client from a Target returned by `loadConfig`. The
+    /// process-local opaque handle keeps credential JSON inside Rust.
     #[napi(factory)]
     pub async fn from_config(target: crate::config::ConfigTargetForClient) -> Result<SheetsClient> {
         build_client(credentials_from_target(&target)?, None).await

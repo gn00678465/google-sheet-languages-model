@@ -119,8 +119,8 @@ export declare class SheetsClient {
    */
   static create(options?: SheetsClientOptions | undefined | null): Promise<SheetsClient>
   /**
-   * Create a client from a Target returned by `loadConfig`. JSON credentials
-   * are re-read from the process environment or that call's cwd `.env` file.
+   * Create a client from a Target returned by `loadConfig`. Its opaque handle
+   * keeps credentials in Rust and never exposes credential JSON to JavaScript.
    */
   static fromConfig(target: ResolvedTarget): Promise<SheetsClient>
   /** Read the whole tab as rows of strings (header row first). Feed the result to `sheetToModel`. */

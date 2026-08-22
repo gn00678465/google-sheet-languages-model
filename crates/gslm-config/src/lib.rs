@@ -74,15 +74,13 @@ pub struct Overrides {
 }
 
 impl Overrides {
-    fn has_values(&self) -> bool {
+    fn has_target_values(&self) -> bool {
         self.sheet.is_some()
             || self.tab.is_some()
             || self.locales.is_some()
             || self.path.is_some()
             || self.format.is_some()
             || self.key_separator.is_some()
-            || self.credentials.is_some()
-            || self.credentials_json.is_some()
     }
 
     fn validate_credentials(&self) -> Result<(), ConfigError> {
@@ -259,10 +257,22 @@ pub fn load(mut options: LoadOptions) -> Result<ResolvedConfig, ConfigError> {
                     searched,
                 });
             }
-            if let Some(path) = legacy {
-                return Err(ConfigError::Legacy { path });
+            if options.targets.is_some() {
+                return Err(ConfigError::NotFound {
+                    start: options.cwd,
+                    searched,
+                });
             }
-            (None, Vec::new(), vec![TargetDraft::named("cli")], searched)
+            let mut cli = TargetDraft::named("cli");
+            apply_overrides(&mut cli, &env_overrides, &options.cwd)?;
+            apply_overrides(&mut cli, &options.overrides, &options.cwd)?;
+            if cli.is_complete() {
+                (None, Vec::new(), vec![TargetDraft::named("cli")], searched)
+            } else if let Some(path) = legacy {
+                return Err(ConfigError::Legacy { path });
+            } else {
+                (None, Vec::new(), vec![TargetDraft::named("cli")], searched)
+            }
         }
     };
 
@@ -271,7 +281,9 @@ pub fn load(mut options: LoadOptions) -> Result<ResolvedConfig, ConfigError> {
         .map(|target| target.name.clone())
         .collect::<Vec<_>>();
     drafts = select_targets(drafts, options.targets.as_deref(), &available)?;
-    if drafts.len() > 1 && (env_overrides.has_values() || options.overrides.has_values()) {
+    if drafts.len() > 1
+        && (env_overrides.has_target_values() || options.overrides.has_target_values())
+    {
         return Err(ConfigError::AmbiguousOverride { available });
     }
 
@@ -703,6 +715,9 @@ fn validate_locales(locales: &[String], target: &str) -> Result<(), ConfigError>
     if locales.is_empty() {
         return Err(invalid_target(target, "locales", "不可為空陣列"));
     }
+    if locales.iter().any(String::is_empty) {
+        return Err(invalid_target(target, "locales", "不可有空白 Locale"));
+    }
     let mut seen = BTreeSet::new();
     if locales.iter().any(|locale| !seen.insert(locale)) {
         return Err(invalid_target(target, "locales", "不可有重複 Locale"));
@@ -823,7 +838,11 @@ fn select_targets(
         return Ok(drafts);
     };
     let mut selected = Vec::with_capacity(requested.len());
+    let mut selected_names = BTreeSet::new();
     for name in requested {
+        if !selected_names.insert(name) {
+            continue;
+        }
         let target = drafts
             .iter()
             .find(|target| target.name == *name)
@@ -841,7 +860,7 @@ fn environment_overrides(
     env: &BTreeMap<String, String>,
     cwd: &Path,
 ) -> Result<Overrides, ConfigError> {
-    let value = |name: &str| env.get(name).cloned();
+    let value = |name: &str| env.get(name).filter(|value| !value.is_empty()).cloned();
     let credentials = value("GSLM_CREDENTIALS");
     let credentials_json = value("GSLM_CREDENTIALS_JSON");
     if credentials.is_some() && credentials_json.is_some() {
@@ -849,11 +868,6 @@ fn environment_overrides(
             path: None,
             field: "credentials".into(),
             message: "GSLM_CREDENTIALS 與 GSLM_CREDENTIALS_JSON 只能擇一".into(),
-        });
-    }
-    if credentials_json.as_deref().is_some_and(str::is_empty) {
-        return Err(ConfigError::MissingEnv {
-            name: "GSLM_CREDENTIALS_JSON".into(),
         });
     }
     let format = match value("GSLM_FORMAT") {
@@ -971,22 +985,30 @@ fn load_dotenv(cwd: &Path, env: &mut BTreeMap<String, String>) -> Result<(), Con
     if !path.is_file() {
         return Ok(());
     }
-    let values = dotenvy::from_path_iter(&path).map_err(|error| ConfigError::Parse {
+    let values = dotenvy::from_path_iter(&path).map_err(|_| ConfigError::Parse {
         path: path.clone(),
         line: None,
         column: None,
-        message: error.to_string(),
-        source: Some(Box::new(error)),
+        message: "無法解析 .env 檔".into(),
+        source: None,
     })?;
     for value in values {
-        let (key, value) = value.map_err(|error| ConfigError::Parse {
+        let (key, value) = value.map_err(|_| ConfigError::Parse {
             path: path.clone(),
             line: None,
             column: None,
-            message: error.to_string(),
-            source: Some(Box::new(error)),
+            message: "無法解析 .env 檔".into(),
+            source: None,
         })?;
-        env.entry(key).or_insert(value);
+        match env.entry(key) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(value);
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) if entry.get().is_empty() => {
+                entry.insert(value);
+            }
+            std::collections::btree_map::Entry::Occupied(_) => {}
+        }
     }
     Ok(())
 }
@@ -1025,7 +1047,7 @@ struct RawConfig {
     schema: Option<String>,
     sheet: Option<String>,
     tab: Option<String>,
-    #[schemars(length(min = 1))]
+    #[schemars(length(min = 1), inner(length(min = 1)))]
     locales: Option<Vec<String>>,
     #[schemars(pattern(r".*\{locale\}.*"))]
     path: Option<String>,
@@ -1043,7 +1065,7 @@ struct RawTarget {
     name: Option<String>,
     sheet: Option<String>,
     tab: Option<String>,
-    #[schemars(length(min = 1))]
+    #[schemars(length(min = 1), inner(length(min = 1)))]
     locales: Option<Vec<String>>,
     #[schemars(pattern(r".*\{locale\}.*"))]
     path: Option<String>,

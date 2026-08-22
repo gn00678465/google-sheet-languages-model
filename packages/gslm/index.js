@@ -1,12 +1,19 @@
-// Public entry point. Everything comes from the napi binding; this file only
-// lifts the `[CODE] ` message prefix that Rust attaches to Sheets errors onto
-// `error.code` (napi async functions cannot set a custom code themselves).
-const binding = require('./binding.js')
+// Public entry point. Native exports load on first use so the pure JS
+// migration helper remains usable on systems without a matching binary.
 const { migrateLegacyConfig } = require('./migrate.js')
-const { join, resolve } = require('node:path')
 
 const CODE_PREFIX = /^\[([A-Z_]+)\] /
-const targetContexts = new WeakMap()
+const CREDENTIAL_HANDLE = Symbol('gslm credential handle')
+let nativeBinding
+
+const credentialFinalizer = new FinalizationRegistry((handle) => {
+  nativeBinding?.releaseConfigCredentials(handle)
+})
+
+function binding() {
+  nativeBinding ??= require('./binding.js')
+  return nativeBinding
+}
 
 function liftCode(err) {
   if (err instanceof Error) {
@@ -41,16 +48,18 @@ class SheetsClient {
     this.#inner = inner
   }
   static async create(options) {
-    return new SheetsClient(await lifted(binding.SheetsClient.create(options)))
+    return new SheetsClient(await lifted(binding().SheetsClient.create(options)))
   }
   static async fromConfig(target) {
-    const context = targetContexts.get(target)
-    const cwd = context?.cwd ?? process.cwd()
-    const nativeTarget = {
-      credentials: target.credentials,
-      dotenvPath: context?.loadDotenv === false ? undefined : join(cwd, '.env'),
+    const credentialHandle = target?.[CREDENTIAL_HANDLE]
+    if (typeof credentialHandle !== 'string') {
+      const error = new Error('Target 不含可用的憑證 handle；請直接使用 loadConfig 回傳的 Target')
+      error.code = 'CREDENTIALS'
+      throw error
     }
-    return new SheetsClient(await lifted(binding.SheetsClient.fromConfig(nativeTarget)))
+    return new SheetsClient(
+      await lifted(binding().SheetsClient.fromConfig({ credentialHandle })),
+    )
   }
   readTab(sheetId, tab) {
     return lifted(this.#inner.readTab(sheetId, tab))
@@ -61,23 +70,41 @@ class SheetsClient {
 }
 
 function loadConfig(options) {
-  const config = liftedSync(() => binding.loadConfig(options))
-  const context = {
-    cwd: resolve(options?.cwd ?? process.cwd()),
-    loadDotenv: options?.loadDotenv ?? true,
+  const config = liftedSync(() => binding().loadConfig(options))
+  for (const target of config.targets) {
+    const credentialHandle = target.credentialHandle
+    delete target.credentialHandle
+    Object.defineProperty(target, CREDENTIAL_HANDLE, { value: credentialHandle })
+    credentialFinalizer.register(target, credentialHandle)
   }
-  for (const target of config.targets) targetContexts.set(target, context)
   return config
 }
 
 function configSchema() {
-  return liftedSync(() => binding.configSchema())
+  return liftedSync(() => binding().configSchema())
 }
 
-module.exports = {
-  ...binding,
+const exported = {
   SheetsClient,
   loadConfig,
   configSchema,
   migrateLegacyConfig,
 }
+
+for (const name of [
+  'flatten',
+  'unflatten',
+  'sheetToModel',
+  'modelToSheet',
+  'orphanKeys',
+  'version',
+]) {
+  Object.defineProperty(exported, name, {
+    enumerable: true,
+    get() {
+      return binding()[name]
+    },
+  })
+}
+
+module.exports = exported

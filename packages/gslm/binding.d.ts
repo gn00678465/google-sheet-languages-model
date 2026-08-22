@@ -8,9 +8,8 @@ export declare class SheetsClient {
    */
   static create(options?: SheetsClientOptions | undefined | null): Promise<SheetsClient>
   /**
-   * Create a client from a Target returned by `loadConfig`. JSON
-   * credentials are read from their named environment variable here, so no
-   * secret crosses the JavaScript boundary.
+   * Create a client from a Target returned by `loadConfig`. The
+   * process-local opaque handle keeps credential JSON inside Rust.
    */
   static fromConfig(target: ConfigTargetForClient): Promise<SheetsClient>
   /**
@@ -57,16 +56,19 @@ export interface ConfigTarget {
   format: string
   keySeparator: string
   credentials: ConfigCredentials
+  /**
+   * Opaque, process-local handle used by [`SheetsClient::from_config`]. It
+   * contains no credential data, but must be retained with this Target.
+   */
+  credentialHandle: string
 }
 
 /**
  * Internal input for `SheetsClient.fromConfig`. It deliberately contains
- * only credential metadata plus a non-secret `.env` path supplied by the JS
- * wrapper; it is not the data returned by `loadConfig`.
+ * only the opaque credential handle returned by `loadConfig`.
  */
 export interface ConfigTargetForClient {
-  credentials: ConfigCredentials
-  dotenvPath?: string
+  credentialHandle: string
 }
 
 /**
@@ -142,6 +144,12 @@ export declare function modelToSheet(model: Model): Array<Array<string>>
  * in the order `modelToSheet` appends them.
  */
 export declare function orphanKeys(model: Model): Array<string>
+
+/**
+ * Drop credentials once JavaScript no longer retains the Target that owns
+ * this opaque handle. Unknown handles are intentionally harmless.
+ */
+export declare function releaseConfigCredentials(handle: string): void
 
 export interface SheetsClientOptions {
   credentials?: CredentialsOptions
