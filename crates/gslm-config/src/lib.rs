@@ -1027,15 +1027,47 @@ fn normalize_path(path: &Path) -> PathBuf {
     for component in path.components() {
         match component {
             Component::CurDir => {}
-            Component::ParentDir => {
-                normalized.pop();
-            }
+            Component::ParentDir => match normalized.components().next_back() {
+                Some(Component::Normal(_)) => {
+                    normalized.pop();
+                }
+                Some(Component::RootDir | Component::Prefix(_)) => {}
+                Some(Component::ParentDir | Component::CurDir) | None => normalized.push(".."),
+            },
             Component::RootDir | Component::Prefix(_) | Component::Normal(_) => {
                 normalized.push(component.as_os_str());
             }
         }
     }
     normalized
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_path;
+    use std::path::{MAIN_SEPARATOR, PathBuf};
+
+    #[test]
+    fn normalize_path_only_pops_normal_components() {
+        let relative = PathBuf::from("project")
+            .join("..")
+            .join("..")
+            .join("out/{locale}.json");
+        assert_eq!(
+            normalize_path(&relative),
+            PathBuf::from("..").join("out/{locale}.json")
+        );
+
+        let rooted = PathBuf::from(MAIN_SEPARATOR.to_string())
+            .join("project")
+            .join("..")
+            .join("..")
+            .join("out/{locale}.json");
+        assert_eq!(
+            normalize_path(&rooted),
+            PathBuf::from(MAIN_SEPARATOR.to_string()).join("out/{locale}.json")
+        );
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
