@@ -16,6 +16,7 @@ pub struct SheetsClientBuilder {
     provider: Option<Arc<dyn TokenProvider>>,
     connect_timeout: Duration,
     timeout: Duration,
+    extra_roots: Vec<rustls::pki_types::CertificateDer<'static>>,
 }
 
 /// Default TCP/TLS connect timeout.
@@ -31,7 +32,19 @@ impl SheetsClientBuilder {
             provider: None,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
             timeout: DEFAULT_TIMEOUT,
+            extra_roots: Vec::new(),
         }
+    }
+
+    /// Trust additional root certificates (DER) on top of the bundled
+    /// Mozilla store — the escape hatch for TLS-intercepting corporate
+    /// proxies. Note: the `gcp_auth` token exchange does not see these.
+    pub fn extra_root_certificates(
+        mut self,
+        certs: impl IntoIterator<Item = rustls::pki_types::CertificateDer<'static>>,
+    ) -> Self {
+        self.extra_roots.extend(certs);
+        self
     }
 
     /// Override the connect timeout (default 10s).
@@ -61,7 +74,7 @@ impl SheetsClientBuilder {
     }
 
     pub async fn build(self) -> Result<SheetsClient, SheetsError> {
-        let tls = tls_config()?;
+        let tls = tls_config(self.extra_roots)?;
 
         let provider = match self.provider {
             Some(p) => p,
@@ -250,17 +263,24 @@ impl SheetsClient {
 
 /// TLS config with the bundled Mozilla root store (`webpki-roots`), so the
 /// client works in containers without `ca-certificates` (e.g. `node:*-slim`)
-/// and behaves identically on every platform. Uses the crypto provider the
-/// host process already installed (e.g. aws-lc-rs), falling back to ring.
-fn tls_config() -> Result<rustls::ClientConfig, SheetsError> {
-    let provider = rustls::crypto::CryptoProvider::get_default()
-        .cloned()
-        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
+/// and behaves identically on every platform. Always uses the `ring`
+/// provider, matching `gcp_auth`, regardless of any process-wide default.
+/// All TLS knobs live here: reqwest ignores its own TLS builder options once
+/// a preconfigured config is supplied.
+fn tls_config(
+    extra_roots: Vec<rustls::pki_types::CertificateDer<'static>>,
+) -> Result<rustls::ClientConfig, SheetsError> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    for cert in extra_roots {
+        roots.add(cert).map_err(|e| {
+            SheetsError::Credentials(format!("invalid extra root certificate: {e}"))
+        })?;
+    }
     let mut config = rustls::ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
-        .map_err(|e| SheetsError::Network(format!("TLS setup failed: {e}")))?
+        .expect("ring supports the default TLS protocol versions")
         .with_root_certificates(roots)
         .with_no_client_auth();
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];

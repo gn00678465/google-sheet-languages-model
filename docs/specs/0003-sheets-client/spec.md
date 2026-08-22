@@ -79,7 +79,7 @@ napi 層暴露 `SheetsClient` class，方法回傳 Promise；憑證與 base URL 
 
 ### 模組
 
-- 新 crate **`gslm-sheets`**：依賴 `gslm-core`（只用 `Table`）、`reqwest`（`default-features = false`，`json` + `rustls-no-provider`）、`rustls`（`ring` provider）、`gcp_auth`、`tokio`、`serde`/`serde_json`、`thiserror`。在 client 建立時以 `install_default()` 安裝 `ring` provider（失敗即表示已安裝，忽略）。
+- 新 crate **`gslm-sheets`**：依賴 `gslm-core`（只用 `Table`）、`reqwest`（`default-features = false`，`json` + `rustls-no-provider`）、`rustls`（`ring` provider）、`gcp_auth`、`tokio`、`serde`/`serde_json`、`thiserror`。TLS 設定由 crate 自組（固定 `ring` provider + 內建 `webpki-roots`，見 Comments），不依賴程序層級的 rustls 預設 provider，也不讀系統 CA。
 - `gslm-core` 不變，維持無 I/O。
 - napi crate 新增對 `gslm-sheets` 的依賴，開啟 napi 的 `tokio_rt` feature 以支援 `async fn`。
 
@@ -143,7 +143,7 @@ napi 層暴露 `SheetsClient` class，方法回傳 Promise；憑證與 base URL 
 - **`RAW` 取代 `USER_ENTERED`** 是行為變更：舊版下以 `=` 開頭的翻譯會變成公式（通常是錯誤），含逗號的數字會被轉型；新版一律存字面值。遷移說明需提及：若有人刻意利用 USER_ENTERED 在 Sheet 內放公式，新版不再支援。
 - **清除後寫入**也是行為變更：舊版會殘留多餘列。這是修正而非相容性問題，但應在 changelog 標明。
 - **靜態 access token** 是新增的憑證形式，主要為了可測試性，但對沒有 service account 的使用者也是實用的逃生口；token 過期後 client 不會自動更新，錯誤會以 `Auth` 種類呈現。
-- **musl 根憑證**：`reqwest` 與 `gcp_auth` 皆在執行期讀系統 CA。alpine 容器需 `ca-certificates`；若 CI 容器測試因此失敗，改用 `webpki-roots` feature（兩個 crate 都支援）並記錄在 ADR-0004 的後果中。
+- **根憑證**：原先打算讀系統 CA，實作時改為內建 `webpki-roots`（見 Comments）。企業 TLS 攔截代理可用 builder 的 `extra_root_certificates` 加入額外根憑證，但 `gcp_auth` 的 token 交換不經此設定。
 - **napi async**：`#[napi] async fn` 需要 `tokio_rt` feature 與 napi 管理的 runtime；`gcp_auth` 與 `reqwest` 的 client 必須在該 runtime 內建立（或至少在其內使用）。若 `SheetsClient::create` 在 Rust 端同步載入憑證但 ADC 需要 async，以 factory async fn 解決。
 - **sheet ID 格式驗證**（舊版 `validateSheetId` 的 20+ 字元規則）不在此層：交給 Google 回 404。
 
@@ -157,6 +157,6 @@ napi 層暴露 `SheetsClient` class，方法回傳 Promise；憑證與 base URL 
 - `gcp_auth` 沒有暴露「清除快取」的 API，`TokenProvider::invalidate` 改為以保存的憑證來源（SA JSON 或 ADC）重建 provider，讓 401 重試真的拿到新 token；`StaticToken` 無法更新，`invalidate` 仍為 no-op（錯誤以 `Auth` 呈現）。
 - `FORMATTED_VALUE` 回傳的非字串儲存格（數字、布林）以 JSON 字面值字串化；`null` 為空字串。
 - JS 測試 5 個（`node:http` fixture server + `accessToken`），在 CI 每個平台執行，驗證 napi 內的 tokio runtime。CI 的 `js-loader` artifact 改上傳 `binding.js` / `binding.d.ts`。
-- **code review 後續**（2026-08-22）：修正 (1) `invalidate` 對 gcp_auth 為 no-op → 重建 provider；(2) `install_default()` 結果被忽略 → 僅在 `CryptoProvider::get_default()` 為 `None` 時才安裝 ring，尊重宿主程序已安裝的 provider；(3) 逾時硬編碼 → builder 可覆寫並補測試。
+- **code review 後續**（2026-08-22）：修正 (1) `invalidate` 對 gcp_auth 為 no-op → 重建 provider；(2) `install_default()` 結果被忽略 → 改為不再安裝程序層級 provider，client 自組 TLS 設定固定用 `ring`（與 `gcp_auth` 一致）；(3) 逾時硬編碼 → builder 可覆寫並補測試。
 - **未處理（記錄為後續）**：clear→PUT 非原子。原子替代方案為 `spreadsheets.batchUpdate` + `updateCells`（gridRange 只給數字 `sheetId`，需先 `spreadsheets.get?fields=sheets.properties` 由 tab 名查出 id）。目前維持兩步並以 `WriteAfterClearFailed` 標示，若使用者回報中斷造成空表，再開 spec 改為 batchUpdate。
 - 根憑證問題提前在 CI 觸發：`node:22-slim`（aarch64 docker）沒有 `ca-certificates`，reqwest 0.13 的 `rustls-platform-verifier` 在 `Client::build()` 就失敗（`network error: builder error`），連走 HTTP 的測試也掛。依 spec 改為內建 `webpki-roots`（自組 `rustls::ClientConfig` 交給 `tls_backend_preconfigured`；`gcp_auth` 開 `webpki-roots` feature），並加一個 `#[ignore]` 的真實 TLS 握手測試（bogus token → `Auth`）。ADR-0004 已更新。

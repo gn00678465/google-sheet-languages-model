@@ -46,6 +46,8 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - name: Real TLS handshake with bundled roots (network only, no credentials)
+        run: cargo test -p gslm-sheets --test client tls_handshake -- --ignored
       - run: pnpm typecheck
       - name: Legacy TypeScript tests
         run: pnpm test
