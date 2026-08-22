@@ -43,13 +43,12 @@ function config() {
 
 function bin(cwd, ...args) {
   return new Promise((resolve, reject) => {
+    const env = { ...process.env }
+    delete env.GSLM_CLI_BASE_URL
+    delete env.GSLM_CLI_ACCESS_TOKEN
     const child = spawn(process.execPath, [join(__dirname, '..', 'bin', 'gslm.js'), ...args], {
       cwd,
-      env: {
-        ...process.env,
-        GSLM_CLI_BASE_URL: baseUrl,
-        GSLM_CLI_ACCESS_TOKEN: 'fixture-token',
-      },
+      env,
     })
     let stdout = ''
     let stderr = ''
@@ -61,41 +60,42 @@ function bin(cwd, ...args) {
 }
 
 describe('gslm bin CLI', () => {
-  it('runs init, pull and push end-to-end', async () => {
+  it('forwards init and help to the native CLI without test environment hooks', async () => {
     const cwd = makeProject()
     try {
       const initialized = await bin(cwd, 'init')
       assert.equal(initialized.status, 0, initialized.stderr)
-      writeFileSync(join(cwd, 'gslm.toml'), config())
-
-      requests = []
-      const pulled = await bin(cwd, 'pull')
-      assert.equal(pulled.status, 0, pulled.stderr)
-      assert.match(readFileSync(join(cwd, 'locales/en.json'), 'utf8'), /"app"/)
-      assert.deepEqual(requests.map((request) => request.method), ['GET'])
-
-      requests = []
-      const pushed = await bin(cwd, 'push')
-      assert.equal(pushed.status, 0, pushed.stderr)
-      assert.deepEqual(requests.map((request) => request.method), ['POST', 'PUT'])
-      assert.deepEqual(JSON.parse(requests[1].body).values, [
-        ['key', 'en', 'zh-TW'],
-        ['app.title', 'Title', '標題'],
-      ])
+      const help = await bin(cwd, '--help')
+      assert.equal(help.status, 0, help.stderr)
+      assert.match(help.stdout, /用法：gslm /)
     } finally {
       rmSync(cwd, { recursive: true, force: true })
     }
   })
 
-  it('exposes direct runCli and high-level pull', async () => {
+  it('runs pull and push through runCli explicit test options', async () => {
     const cwd = makeProject()
     try {
       assert.equal(await runCli(['gslm', 'init'], { cwd }), 0)
       writeFileSync(join(cwd, 'gslm.toml'), config())
+      requests = []
+      assert.equal(await runCli(['gslm', 'pull'], { cwd, baseUrl, accessToken: 'fixture-token' }), 0)
+      assert.match(readFileSync(join(cwd, 'locales/en.json'), 'utf8'), /"app"/)
+      assert.deepEqual(requests.map((request) => request.method), ['GET'])
+
+      requests = []
+      assert.equal(await runCli(['gslm', 'push'], { cwd, baseUrl, accessToken: 'fixture-token' }), 0)
+      assert.deepEqual(requests.map((request) => request.method), ['POST', 'PUT'])
+      assert.deepEqual(JSON.parse(requests[1].body).values, [
+        ['key', 'en', 'zh-TW'],
+        ['app.title', 'Title', '標題'],
+      ])
+
       const target = loadConfig({ cwd, env: {} }).targets[0]
       requests = []
       const summary = await pull(target, { baseUrl, accessToken: 'fixture-token' })
-      assert.equal(summary.created, 2)
+      assert.equal(summary.created, 0)
+      assert.equal(summary.unchanged, 2)
       assert.deepEqual(requests.map((request) => request.method), ['GET'])
     } finally {
       rmSync(cwd, { recursive: true, force: true })

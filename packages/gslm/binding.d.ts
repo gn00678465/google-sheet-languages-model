@@ -223,15 +223,15 @@ export declare function releaseConfigCredentials(handle: string): void
  */
 export declare function runCli(argv: Array<string>, options?: RunCliOptions | undefined | null): Promise<number>
 
-/**
- * Options for an embedded CLI invocation. Network overrides are intentionally
- * not public JS API; fixture tests use `GSLM_CLI_BASE_URL` and
- * `GSLM_CLI_ACCESS_TOKEN` as an environment bridge.
- */
+/** Options for an embedded CLI invocation. */
 export interface RunCliOptions {
   cwd?: string
   isTty?: boolean
   color?: string
+  /** Explicit Sheets origin for embedding hosts and tests. */
+  baseUrl?: string
+  /** Explicit static token for embedding hosts and tests. */
+  accessToken?: string
 }
 
 export interface SheetsClientOptions {

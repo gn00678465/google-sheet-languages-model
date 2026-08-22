@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // `migrate` is intentionally JavaScript: importing an old executable config is
-// the one compatibility task Rust cannot perform (ADR-0003). The remaining
-// CLI will move to Rust in spec 0005.
+// the one compatibility task Rust cannot perform (ADR-0003). All other
+// commands are forwarded to the Rust CLI through N-API.
 const { existsSync, readFileSync, writeFileSync } = require('node:fs')
 const { dirname, extname, resolve } = require('node:path')
 const { pathToFileURL } = require('node:url')

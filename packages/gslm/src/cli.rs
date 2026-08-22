@@ -13,15 +13,17 @@ fn to_js(error: gslm_cli::CliError) -> Error {
     )
 }
 
-/// Options for an embedded CLI invocation. Network overrides are intentionally
-/// not public JS API; fixture tests use `GSLM_CLI_BASE_URL` and
-/// `GSLM_CLI_ACCESS_TOKEN` as an environment bridge.
+/// Options for an embedded CLI invocation.
 #[napi(object)]
 #[derive(Default)]
 pub struct RunCliOptions {
     pub cwd: Option<String>,
     pub is_tty: Option<bool>,
     pub color: Option<String>,
+    /// Explicit Sheets origin for embedding hosts and tests.
+    pub base_url: Option<String>,
+    /// Explicit static token for embedding hosts and tests.
+    pub access_token: Option<String>,
 }
 
 #[napi(object)]
@@ -137,17 +139,6 @@ fn color(value: Option<String>) -> Option<ColorChoice> {
     }
 }
 
-fn test_sheets_override() -> SheetsOverride {
-    SheetsOverride {
-        base_url: std::env::var("GSLM_CLI_BASE_URL")
-            .ok()
-            .filter(|value| !value.is_empty()),
-        access_token: std::env::var("GSLM_CLI_ACCESS_TOKEN")
-            .ok()
-            .filter(|value| !value.is_empty()),
-    }
-}
-
 /// Run the same clap-driven CLI as `bin/gslm.js`, returning its shell exit
 /// code instead of throwing command errors.
 #[napi]
@@ -160,7 +151,10 @@ pub async fn run_cli(argv: Vec<String>, options: Option<RunCliOptions>) -> Resul
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
         stdout: Box::new(std::io::stdout()),
         stderr: Box::new(std::io::stderr()),
-        sheets: test_sheets_override(),
+        sheets: SheetsOverride {
+            base_url: options.base_url,
+            access_token: options.access_token,
+        },
         color: color(options.color),
         is_tty: options.is_tty,
         version: Some(env!("GSLM_PACKAGE_VERSION")),

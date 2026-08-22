@@ -47,6 +47,7 @@ jobs:
       - run: cargo test --workspace
       - name: Real TLS handshake with bundled roots (network only, no credentials)
         run: cargo test -p gslm-sheets --test client tls_handshake -- --ignored
+      - run: pnpm -C packages/gslm build:debug
       - run: pnpm -C packages/gslm test
 
   build:

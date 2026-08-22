@@ -113,6 +113,7 @@ pub(crate) fn write_catalog(
         path: parent.to_path_buf(),
         source,
     })?;
+    restrict_temporary_permissions(&temporary, path)?;
     use std::io::Write;
     temporary
         .write_all(rendered.as_bytes())
@@ -126,6 +127,30 @@ pub(crate) fn write_catalog(
         source: error.error,
     })?;
     Ok(outcome)
+}
+
+#[cfg(unix)]
+fn restrict_temporary_permissions(
+    temporary: &tempfile::NamedTempFile,
+    destination: &Path,
+) -> Result<(), CliError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    temporary
+        .as_file()
+        .set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(|source| CliError::Io {
+            path: destination.to_path_buf(),
+            source,
+        })
+}
+
+#[cfg(not(unix))]
+fn restrict_temporary_permissions(
+    _temporary: &tempfile::NamedTempFile,
+    _destination: &Path,
+) -> Result<(), CliError> {
+    Ok(())
 }
 
 pub(crate) fn shape_mismatch(read: &ReadCatalog, format: Format) -> bool {

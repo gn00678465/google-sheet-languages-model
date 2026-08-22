@@ -1,5 +1,5 @@
 ---
-status: ready-for-agent
+status: done
 date: 2026-08-22
 adrs: [0001, 0002, 0003, 0004]
 depends_on: [0002, 0003, 0004]
@@ -179,3 +179,8 @@ napi 暴露 `runCli(argv)`；`bin/gslm.js` 只把 `process.argv` 交給它並設
 - **Unchanged 偵測靠內容比對**而非 hash，檔案小，成本可忽略；比對的是寫出字串與既有檔案位元組，因此舊版無結尾換行的檔案第一次 pull 會被標為 Updated（僅換行差異）。
 - **Exit code 130** 給中斷，與 shell 慣例一致；Node 端 `process.exitCode = 130`。
 - 刪除舊 TS 程式碼是 breaking change 的最後一步；在此之前 root `pnpm test`（vitest）仍在跑，本票完成後 CI 的 legacy 測試步驟一併移除。
+
+## Comments
+
+- 實作已完成：CLI 流程、Catalog 原子寫入、N-API `runCli`／高階 `pull`／`push`、JS bin 轉送與端對端測試均已納入工作區。
+- Review 後將測試用 Sheets 端點與 token 改為 `runCli` 的明確選項，避免正式執行時隱式讀取環境變數；Node 保留 Ctrl-C 的預設處理，避免在嵌入程序累積 Rust signal handler。

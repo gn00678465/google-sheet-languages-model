@@ -87,6 +87,10 @@ export interface RunCliOptions {
   cwd?: string
   isTty?: boolean
   color?: 'auto' | 'always' | 'never'
+  /** Explicit Sheets API origin for an embedding host or test. */
+  baseUrl?: string
+  /** Explicit static token for an embedding host or test. */
+  accessToken?: string
 }
 
 /** Controls whether a high-level pull writes files and bypasses empty-Sheet protection. */

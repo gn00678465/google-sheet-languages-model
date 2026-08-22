@@ -96,12 +96,23 @@ function runCli(argv, options) {
   return lifted(binding().runCli(argv, options))
 }
 
+async function retainTarget(target, operation) {
+  const keepAlive = { target }
+  try {
+    return await operation
+  } finally {
+    // The native credential registry belongs to this target. Keep the actual
+    // JS object alive until N-API has completed its asynchronous operation.
+    keepAlive.target = undefined
+  }
+}
+
 function pull(target, options) {
-  return lifted(binding().pull(targetForNative(target), options))
+  return retainTarget(target, lifted(binding().pull(targetForNative(target), options)))
 }
 
 function push(target, options) {
-  return lifted(binding().push(targetForNative(target), options))
+  return retainTarget(target, lifted(binding().push(targetForNative(target), options)))
 }
 
 const exported = {

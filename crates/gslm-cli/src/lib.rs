@@ -16,12 +16,13 @@ pub use push::{PushOptions, PushSummary, push};
 
 use args::{Cli, Command, FieldOverrides};
 use clap::error::ErrorKind;
-use clap::{CommandFactory, FromArgMatches};
+use clap::{Arg, ArgAction, CommandFactory, FromArgMatches};
 use gslm_config::{CredentialsSource, LoadOptions, Overrides, ResolvedTarget};
 use gslm_core::Format;
 use gslm_sheets::{Credentials, SheetsClient, SheetsError};
 use report::Reporter;
 use std::collections::{BTreeMap, HashMap};
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -86,7 +87,7 @@ pub enum CliError {
     PushEmptyLocal,
     #[error("嚴格模式拒絕 push：{}", reasons.join("；"))]
     PushStrict { reasons: Vec<String> },
-    #[error("無法存取 {path}")]
+    #[error("無法存取 {path}：{source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -94,14 +95,12 @@ pub enum CliError {
     },
     #[error("請經由 gslm 的 JS 入口執行 migrate")]
     MigrateViaJs,
-    #[error("執行已中斷")]
-    Interrupted,
 }
 
 fn sheets_message(error: &SheetsError) -> String {
     match error {
         SheetsError::WriteAfterClearFailed { .. } => "Tab 已被清空但寫入失敗，請重試 push".into(),
-        SheetsError::Credentials(_) => "Google Sheets 憑證無效".into(),
+        SheetsError::Credentials(message) => format!("Google Sheets 憑證無效：{message}"),
         SheetsError::Auth(_) => "無法取得 Google Sheets 存取權杖".into(),
         SheetsError::PermissionDenied { sheet_id, .. } => {
             format!("沒有 Sheet {sheet_id} 的存取權限；請將服務帳號設為編輯者")
@@ -160,7 +159,6 @@ impl CliError {
             Self::PushStrict { .. } => "PUSH_STRICT",
             Self::Io { .. } => "IO",
             Self::MigrateViaJs => "MIGRATE_JS_ONLY",
-            Self::Interrupted => "INTERRUPTED",
         }
     }
 }
@@ -224,22 +222,18 @@ pub async fn run_async(argv: Vec<String>, mut options: RunOptions) -> i32 {
         Command::Migrate => Err(CliError::MigrateViaJs),
         Command::Pull(command) => {
             let command = cli.sync_command(command.clone());
-            run_interruptible_command(&command, true, &mut options).await
+            run_sync_command(&command, true, &mut options).await
         }
         Command::Push(command) => {
             let command = cli.push_command(command.clone());
-            run_interruptible_command(&command, false, &mut options).await
+            run_sync_command(&command, false, &mut options).await
         }
     };
     match result {
         Ok(()) => 0,
         Err(error) => {
             let _ = writeln!(options.stderr, "error: [{}] {error}", error.code());
-            if matches!(error, CliError::Interrupted) {
-                130
-            } else {
-                1
-            }
+            1
         }
     }
 }
@@ -255,7 +249,7 @@ async fn run_sync_command(
         &mut options.stderr,
         command.quiet,
         command.verbose,
-        options.color.or(command.color),
+        command.color.or(options.color),
         options.is_tty,
         options
             .env
@@ -311,20 +305,6 @@ async fn run_sync_command(
     Ok(())
 }
 
-async fn run_interruptible_command(
-    command: &args::SyncCommand,
-    is_pull: bool,
-    options: &mut RunOptions,
-) -> Result<(), CliError> {
-    tokio::select! {
-        result = run_sync_command(command, is_pull, options) => result,
-        signal = tokio::signal::ctrl_c() => match signal {
-            Ok(()) => Err(CliError::Interrupted),
-            Err(_) => run_sync_command(command, is_pull, options).await,
-        },
-    }
-}
-
 fn load_config(
     command: &args::SyncCommand,
     options: &RunOptions,
@@ -333,10 +313,7 @@ fn load_config(
     gslm_config::load(LoadOptions {
         cwd: options.cwd.clone(),
         config_path: command.config.clone(),
-        env: options
-            .env
-            .clone()
-            .unwrap_or_else(|| std::env::vars().collect()),
+        env: options.env.clone().unwrap_or_else(process_environment),
         overrides: command.overrides.to_config(),
         targets: (!targets.is_empty()).then_some(targets),
         load_dotenv: !command.no_dotenv,
@@ -345,7 +322,41 @@ fn load_config(
 }
 
 fn cli_command(options: &RunOptions) -> clap::Command {
-    Cli::command().version(options.version.unwrap_or(env!("CARGO_PKG_VERSION")))
+    Cli::command()
+        .name("gslm")
+        .bin_name("gslm")
+        .version(options.version.unwrap_or(env!("CARGO_PKG_VERSION")))
+        .arg(
+            Arg::new("help")
+                .short('h')
+                .long("help")
+                .global(true)
+                .action(ArgAction::Help)
+                .help("顯示此說明")
+                .help_heading("選項"),
+        )
+        .arg(
+            Arg::new("version")
+                .short('V')
+                .long("version")
+                .action(ArgAction::Version)
+                .help("顯示版本")
+                .help_heading("選項"),
+        )
+}
+
+fn process_environment() -> BTreeMap<String, String> {
+    environment_from_os(std::env::vars_os())
+}
+
+fn environment_from_os<I>(environment: I) -> BTreeMap<String, String>
+where
+    I: IntoIterator<Item = (OsString, OsString)>,
+{
+    environment
+        .into_iter()
+        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
+        .collect()
 }
 
 fn client_key(target: &ResolvedTarget, override_options: &SheetsOverride) -> String {
@@ -394,5 +405,30 @@ impl FieldOverrides {
             credentials: self.credentials.clone(),
             credentials_json: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn non_unicode_process_environment_entries_are_ignored() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let environment = environment_from_os([
+            (OsString::from("VALID"), OsString::from("value")),
+            (OsString::from_vec(vec![0xFF]), OsString::from("value")),
+            (
+                OsString::from("INVALID_VALUE"),
+                OsString::from_vec(vec![0xFF]),
+            ),
+        ]);
+
+        assert_eq!(
+            environment,
+            BTreeMap::from([("VALID".into(), "value".into())])
+        );
     }
 }

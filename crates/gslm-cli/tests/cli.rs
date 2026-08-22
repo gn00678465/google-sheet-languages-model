@@ -1,4 +1,4 @@
-use gslm_cli::{RunOptions, SheetsOverride, run};
+use gslm_cli::{ColorChoice, RunOptions, SheetsOverride, run};
 use serde_json::json;
 use std::fs;
 use std::io::Write;
@@ -97,6 +97,35 @@ locales = ["en", "zh-TW"]
 }
 
 fn execute(project: &Path, server: &MockServer, args: &[&str]) -> (i32, String, String) {
+    execute_with_display_options(project, server, args, None, None)
+}
+
+fn execute_with_display_options(
+    project: &Path,
+    server: &MockServer,
+    args: &[&str],
+    color: Option<ColorChoice>,
+    is_tty: Option<bool>,
+) -> (i32, String, String) {
+    execute_with_sheets(project, server, args, color, is_tty, Some("test-token"))
+}
+
+fn execute_without_static_token(
+    project: &Path,
+    server: &MockServer,
+    args: &[&str],
+) -> (i32, String, String) {
+    execute_with_sheets(project, server, args, None, None, None)
+}
+
+fn execute_with_sheets(
+    project: &Path,
+    server: &MockServer,
+    args: &[&str],
+    color: Option<ColorChoice>,
+    is_tty: Option<bool>,
+    access_token: Option<&str>,
+) -> (i32, String, String) {
     let stdout = Arc::new(Mutex::new(Vec::new()));
     let stderr = Arc::new(Mutex::new(Vec::new()));
     let options = RunOptions {
@@ -105,8 +134,10 @@ fn execute(project: &Path, server: &MockServer, args: &[&str]) -> (i32, String, 
         stderr: Box::new(SharedWriter(stderr.clone())),
         sheets: SheetsOverride {
             base_url: Some(server.uri()),
-            access_token: Some("test-token".into()),
+            access_token: access_token.map(str::to_owned),
         },
+        color,
+        is_tty,
         ..RunOptions::default()
     };
     let argv = std::iter::once("gslm")
@@ -119,6 +150,78 @@ fn execute(project: &Path, server: &MockServer, args: &[&str]) -> (i32, String, 
     let stdout = String::from_utf8(stdout.lock().unwrap().clone()).unwrap();
     let stderr = String::from_utf8(stderr.lock().unwrap().clone()).unwrap();
     (code, stdout, stderr)
+}
+
+#[tokio::test]
+async fn help_uses_the_stable_program_name_and_explains_commands_and_options() {
+    let server = MockServer::start().await;
+    let project = tempfile::tempdir().unwrap();
+    let (code, stdout, _) = execute(project.path(), &server, &["--help"]);
+
+    assert_eq!(code, 0);
+    assert!(stdout.contains("用法：gslm"));
+    assert!(stdout.contains("從 Google Sheets 下載 Catalog"));
+    assert!(stdout.contains("設定檔路徑"));
+    assert!(!stdout.contains("Usage:"));
+
+    let (code, pull_help, _) = execute(project.path(), &server, &["pull", "--help"]);
+    assert_eq!(code, 0);
+    assert!(pull_help.contains("用法：gslm pull"));
+    assert!(pull_help.contains("覆寫服務帳號憑證檔路徑"));
+    assert!(!pull_help.contains("Options:"));
+}
+
+#[tokio::test]
+async fn explicit_color_flag_overrides_the_embedding_default() {
+    let server = MockServer::start().await;
+    let project = project("nest");
+    fs::create_dir(project.path().join("locales")).unwrap();
+    fs::write(
+        project.path().join("locales/en.json"),
+        "{\"title\":\"Title\"}\n",
+    )
+    .unwrap();
+
+    let (code, _, stderr) = execute_with_display_options(
+        project.path(),
+        &server,
+        &["push", "--dry-run", "--color", "never"],
+        Some(ColorChoice::Always),
+        Some(true),
+    );
+
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("找不到 zh-TW 的 Catalog"));
+    assert!(!stderr.contains("\u{1b}["));
+}
+
+#[tokio::test]
+async fn init_existing_file_keeps_the_io_cause_in_the_error_message() {
+    let server = MockServer::start().await;
+    let project = tempfile::tempdir().unwrap();
+    fs::write(project.path().join("gslm.toml"), "version = 1\n").unwrap();
+
+    let (code, _, stderr) = execute(project.path(), &server, &["init"]);
+
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[IO]"));
+    assert!(stderr.contains("設定檔已存在；可加 --force 覆寫"));
+}
+
+#[tokio::test]
+async fn credential_errors_keep_safe_configuration_details() {
+    let server = MockServer::start().await;
+    let project = project("nest");
+    let (code, _, stderr) = execute_without_static_token(
+        project.path(),
+        &server,
+        &["pull", "--credentials", "missing-service-account.json"],
+    );
+
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[CREDENTIALS]"), "{stderr}");
+    assert!(stderr.contains("Google Sheets 憑證無效：cannot read"));
+    assert!(stderr.contains("missing-service-account.json"));
 }
 
 fn sheet(rows: serde_json::Value) -> ResponseTemplate {
@@ -149,6 +252,19 @@ async fn pull_writes_nested_catalogs_creates_directories_and_detects_unchanged()
         fs::read_to_string(project.path().join("locales/zh-TW.json")).unwrap(),
         "{\n  \"app\": {\n    \"title\": \"標題\"\n  }\n}\n"
     );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        assert_eq!(
+            fs::metadata(project.path().join("locales/en.json"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
 
     let (code, _, stderr) = execute(project.path(), &server, &["pull", "--verbose"]);
     assert_eq!(code, 0, "{stderr}");
