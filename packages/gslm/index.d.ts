@@ -118,7 +118,10 @@ export declare class SheetsClient {
    * `SheetsError`.
    */
   static create(options?: SheetsClientOptions | undefined | null): Promise<SheetsClient>
-  /** Create a client from a Target returned by `loadConfig`. */
+  /**
+   * Create a client from a Target returned by `loadConfig`. JSON credentials
+   * are re-read from the process environment or that call's cwd `.env` file.
+   */
   static fromConfig(target: ResolvedTarget): Promise<SheetsClient>
   /** Read the whole tab as rows of strings (header row first). Feed the result to `sheetToModel`. */
   readTab(sheetId: string, tab: string): Promise<Array<Array<string>>>

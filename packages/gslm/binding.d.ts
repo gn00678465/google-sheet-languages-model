@@ -12,7 +12,7 @@ export declare class SheetsClient {
    * credentials are read from their named environment variable here, so no
    * secret crosses the JavaScript boundary.
    */
-  static fromConfig(target: ConfigTarget): Promise<SheetsClient>
+  static fromConfig(target: ConfigTargetForClient): Promise<SheetsClient>
   /**
    * Read the whole tab as rows of strings (header row first). Feed the
    * result to `sheetToModel`.
@@ -57,6 +57,16 @@ export interface ConfigTarget {
   format: string
   keySeparator: string
   credentials: ConfigCredentials
+}
+
+/**
+ * Internal input for `SheetsClient.fromConfig`. It deliberately contains
+ * only credential metadata plus a non-secret `.env` path supplied by the JS
+ * wrapper; it is not the data returned by `loadConfig`.
+ */
+export interface ConfigTargetForClient {
+  credentials: ConfigCredentials
+  dotenvPath?: string
 }
 
 /**

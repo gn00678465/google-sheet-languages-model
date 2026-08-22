@@ -62,7 +62,7 @@ fn credentials_from(opts: Option<CredentialsOptions>) -> Result<Credentials> {
     })
 }
 
-fn credentials_from_target(target: &crate::config::ConfigTarget) -> Result<Credentials> {
+fn credentials_from_target(target: &crate::config::ConfigTargetForClient) -> Result<Credentials> {
     match target.credentials.kind.as_str() {
         "file" => target
             .credentials
@@ -75,10 +75,14 @@ fn credentials_from_target(target: &crate::config::ConfigTarget) -> Result<Crede
                 target.credentials.env.as_ref().ok_or_else(|| {
                     credentials_error("config Target 的 json credentials 缺少 env")
                 })?;
-            let json = std::env::var(env_name)
+            let from_env = std::env::var(env_name)
                 .ok()
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| credentials_error(&format!("缺少或為空的環境變數 {env_name}")))?;
+                .filter(|value| !value.is_empty());
+            let json = match from_env {
+                Some(value) => Some(value),
+                None => dotenv_value(target.dotenv_path.as_deref(), env_name)?,
+            }
+            .ok_or_else(|| credentials_error(&format!("缺少或為空的環境變數 {env_name}")))?;
             Ok(Credentials::ServiceAccountJson(json))
         }
         "adc" => Ok(Credentials::ApplicationDefault),
@@ -86,6 +90,22 @@ fn credentials_from_target(target: &crate::config::ConfigTarget) -> Result<Crede
             "config Target 的 credentials.kind 不支援 `{kind}`"
         ))),
     }
+}
+
+fn dotenv_value(path: Option<&str>, env_name: &str) -> Result<Option<String>> {
+    let Some(path) = path.map(std::path::Path::new).filter(|path| path.is_file()) else {
+        return Ok(None);
+    };
+    let values = dotenvy::from_path_iter(path)
+        .map_err(|error| credentials_error(&format!("無法讀取 {}: {error}", path.display())))?;
+    for value in values {
+        let (name, value) = value
+            .map_err(|error| credentials_error(&format!("無法解析 {}: {error}", path.display())))?;
+        if name == env_name && !value.is_empty() {
+            return Ok(Some(value));
+        }
+    }
+    Ok(None)
 }
 
 async fn build_client(credentials: Credentials, base_url: Option<String>) -> Result<SheetsClient> {
@@ -118,7 +138,7 @@ impl SheetsClient {
     /// credentials are read from their named environment variable here, so no
     /// secret crosses the JavaScript boundary.
     #[napi(factory)]
-    pub async fn from_config(target: crate::config::ConfigTarget) -> Result<SheetsClient> {
+    pub async fn from_config(target: crate::config::ConfigTargetForClient) -> Result<SheetsClient> {
         build_client(credentials_from_target(&target)?, None).await
     }
 

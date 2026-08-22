@@ -3,8 +3,10 @@
 // `error.code` (napi async functions cannot set a custom code themselves).
 const binding = require('./binding.js')
 const { migrateLegacyConfig } = require('./migrate.js')
+const { join, resolve } = require('node:path')
 
 const CODE_PREFIX = /^\[([A-Z_]+)\] /
+const targetContexts = new WeakMap()
 
 function liftCode(err) {
   if (err instanceof Error) {
@@ -42,7 +44,13 @@ class SheetsClient {
     return new SheetsClient(await lifted(binding.SheetsClient.create(options)))
   }
   static async fromConfig(target) {
-    return new SheetsClient(await lifted(binding.SheetsClient.fromConfig(target)))
+    const context = targetContexts.get(target)
+    const cwd = context?.cwd ?? process.cwd()
+    const nativeTarget = {
+      credentials: target.credentials,
+      dotenvPath: context?.loadDotenv === false ? undefined : join(cwd, '.env'),
+    }
+    return new SheetsClient(await lifted(binding.SheetsClient.fromConfig(nativeTarget)))
   }
   readTab(sheetId, tab) {
     return lifted(this.#inner.readTab(sheetId, tab))
@@ -53,7 +61,13 @@ class SheetsClient {
 }
 
 function loadConfig(options) {
-  return liftedSync(() => binding.loadConfig(options))
+  const config = liftedSync(() => binding.loadConfig(options))
+  const context = {
+    cwd: resolve(options?.cwd ?? process.cwd()),
+    loadDotenv: options?.loadDotenv ?? true,
+  }
+  for (const target of config.targets) targetContexts.set(target, context)
+  return config
 }
 
 function configSchema() {

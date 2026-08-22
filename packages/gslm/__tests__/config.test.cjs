@@ -82,4 +82,36 @@ test('SheetsClient.fromConfig can re-read JSON credentials loaded from cwd .env'
       error.code === 'CREDENTIALS' &&
       /missing client_email/.test(error.message),
   )
+
+  const unrelated = tempdir()
+  fs.writeFileSync(
+    path.join(unrelated, 'gslm.toml'),
+    'version = 1\n' +
+      'sheet = "sheet-id"\n' +
+      'tab = "Main"\n' +
+      'locales = ["en"]\n' +
+      'path = "locales/{locale}.json"\n' +
+      '[credentials]\n' +
+      'env = "GSLM_TEST_CONFIG_DOTENV_JSON"\n',
+  )
+  assert.throws(
+    () => loadConfig({ cwd: unrelated }),
+    (error) =>
+      error &&
+      error.code === 'CONFIG_INVALID' &&
+      /GSLM_TEST_CONFIG_DOTENV_JSON/.test(error.message),
+  )
+
+  const withoutDotenv = loadConfig({
+    cwd: directory,
+    loadDotenv: false,
+    env: { GSLM_TEST_CONFIG_DOTENV_JSON: '{"type":"service_account"}' },
+  })
+  await assert.rejects(
+    SheetsClient.fromConfig(withoutDotenv.targets[0]),
+    (error) =>
+      error &&
+      error.code === 'CREDENTIALS' &&
+      /GSLM_TEST_CONFIG_DOTENV_JSON/.test(error.message),
+  )
 })
