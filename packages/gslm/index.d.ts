@@ -82,6 +82,64 @@ export declare function loadConfig(options?: LoadConfigOptions | undefined | nul
 /** JSON Schema draft 2020-12 generated from the Rust config types. */
 export declare function configSchema(): Record<string, unknown>
 
+/** Options for an embedded command invocation. */
+export interface RunCliOptions {
+  cwd?: string
+  isTty?: boolean
+  color?: 'auto' | 'always' | 'never'
+}
+
+/** Controls whether a high-level pull writes files and bypasses empty-Sheet protection. */
+export interface PullOptions {
+  dryRun?: boolean
+  force?: boolean
+}
+
+/** Pull options plus strict validation for Orphan keys and shape drift. */
+export interface PushOptions extends PullOptions {
+  strict?: boolean
+}
+
+/** One Catalog path considered by a pull. */
+export interface CatalogFileSummary {
+  locale: string
+  path: string
+  keys: number
+  outcome?: 'created' | 'updated' | 'unchanged'
+}
+
+/** Summary returned after pulling one Target. */
+export interface PullSummary {
+  target: string
+  files: CatalogFileSummary[]
+  created: number
+  updated: number
+  unchanged: number
+}
+
+/** Number of keys observed for one Locale during push. */
+export interface LocaleKeyCount {
+  locale: string
+  keys: number
+}
+
+/** Summary returned after pushing one Target. */
+export interface PushSummary {
+  target: string
+  rows: number
+  columns: number
+  localeKeys: LocaleKeyCount[]
+  orphanKeys: string[]
+  warnings: string[]
+}
+
+/** Run a CLI command without spawning a child process; returns its exit code. */
+export declare function runCli(argv: string[], options?: RunCliOptions | undefined | null): Promise<number>
+/** Pull a Target returned by `loadConfig` using its Rust-only credential handle. */
+export declare function pull(target: ResolvedTarget, options?: PullOptions | undefined | null): Promise<PullSummary>
+/** Push a Target returned by `loadConfig` using its Rust-only credential handle. */
+export declare function push(target: ResolvedTarget, options?: PushOptions | undefined | null): Promise<PushSummary>
+
 /** TOML preview and non-fatal migration warnings from a legacy config object. */
 export interface LegacyMigrationResult {
   toml: string

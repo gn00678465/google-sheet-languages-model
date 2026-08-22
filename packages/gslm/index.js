@@ -51,14 +51,8 @@ class SheetsClient {
     return new SheetsClient(await lifted(binding().SheetsClient.create(options)))
   }
   static async fromConfig(target) {
-    const credentialHandle = target?.[CREDENTIAL_HANDLE]
-    if (typeof credentialHandle !== 'string') {
-      const error = new Error('Target 不含可用的憑證 handle；請直接使用 loadConfig 回傳的 Target')
-      error.code = 'CREDENTIALS'
-      throw error
-    }
     return new SheetsClient(
-      await lifted(binding().SheetsClient.fromConfig({ credentialHandle })),
+      await lifted(binding().SheetsClient.fromConfig({ credentialHandle: credentialHandleFor(target) })),
     )
   }
   readTab(sheetId, tab) {
@@ -84,11 +78,40 @@ function configSchema() {
   return liftedSync(() => binding().configSchema())
 }
 
+function credentialHandleFor(target) {
+  const credentialHandle = target?.[CREDENTIAL_HANDLE]
+  if (typeof credentialHandle !== 'string') {
+    const error = new Error('Target 不含可用的憑證 handle；請直接使用 loadConfig 回傳的 Target')
+    error.code = 'CREDENTIALS'
+    throw error
+  }
+  return credentialHandle
+}
+
+function targetForNative(target) {
+  return { ...target, credentialHandle: credentialHandleFor(target) }
+}
+
+function runCli(argv, options) {
+  return lifted(binding().runCli(argv, options))
+}
+
+function pull(target, options) {
+  return lifted(binding().pull(targetForNative(target), options))
+}
+
+function push(target, options) {
+  return lifted(binding().push(targetForNative(target), options))
+}
+
 const exported = {
   SheetsClient,
   loadConfig,
   configSchema,
   migrateLegacyConfig,
+  runCli,
+  pull,
+  push,
 }
 
 for (const name of [

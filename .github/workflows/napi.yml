@@ -1,7 +1,6 @@
 name: napi
 
-# Build / test / publish pipeline for the napi-rs rewrite (spec 0001).
-# Legacy ci.yml / publish.yml keep serving `main` and `v*.*.*` tags.
+# Build / test / publish pipeline for the napi-rs implementation.
 #
 #   push to rewrite/** or PR  → lint + build + test + publish (dry-run)
 #   push tag napi-v<version>  → lint + build + test + publish + verify-install
@@ -48,9 +47,7 @@ jobs:
       - run: cargo test --workspace
       - name: Real TLS handshake with bundled roots (network only, no credentials)
         run: cargo test -p gslm-sheets --test client tls_handshake -- --ignored
-      - run: pnpm typecheck
-      - name: Legacy TypeScript tests
-        run: pnpm test
+      - run: pnpm -C packages/gslm test
 
   build:
     name: build ${{ matrix.settings.target }}

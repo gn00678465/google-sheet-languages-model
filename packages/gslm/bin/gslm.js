@@ -90,17 +90,14 @@ async function migrate(argv) {
 }
 
 async function main() {
-  if (args.length === 1 && (args[0] === '--version' || args[0] === '-v')) {
-    // version() comes from the Rust binding, so this proves bin → napi → Rust.
-    const { version } = require('../index.js')
-    process.stdout.write(`${version()}\n`)
-    return
-  }
   if (args[0] === 'migrate') {
     await migrate(args.slice(1))
     return
   }
-  throw new Error('commands are not implemented yet in this build (available: --version, migrate).')
+  // Keep native loading after the migrate branch: migration must still work on
+  // platforms where no matching native binding has been installed.
+  const { runCli } = require('../index.js')
+  process.exitCode = await runCli(process.argv.slice(1), { isTty: process.stderr.isTTY })
 }
 
 main().catch((error) => {

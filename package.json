@@ -2,7 +2,7 @@
   "name": "google-sheet-languages-model-workspace",
   "private": true,
   "version": "0.5.1",
-  "description": "Workspace root. The publishable package lives in packages/gslm; the legacy TypeScript implementation remains at the root until it is fully ported (see docs/specs/0001-napi-workspace-skeleton).",
+  "description": "Workspace root. The publishable package and CLI live in packages/gslm.",
   "repository": {
     "type": "git",
     "url": "https://github.com/gn00678465/google-sheet-languages-model.git"
@@ -16,39 +16,18 @@
     "test:napi": "pnpm -C packages/gslm test",
     "test:rust": "cargo test --workspace",
     "lint:rust": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "dev": "tsdown --watch",
-    "build": "tsdown",
-    "example:api:push": "tsx example/push.ts",
-    "example:api:pull:nest": "tsx example/pull.ts --type=nest",
-    "example:api:pull:flat": "tsx example/pull.ts --type=flat",
-    "example:cli:pull": "node dist/cli.js pull --config example/gslm.config.js",
-    "example:cli:push": "node dist/cli.js push --config example/gslm.config.js",
-    "example:cli2:pull": "node dist/cli.js pull --config example/gslm.config.with-credentials-object.js",
-    "example:cli2:push": "node dist/cli.js push --config example/gslm.config.with-credentials-object.js",
-    "typecheck": "tsc --noEmit",
+    "test": "pnpm -C packages/gslm test",
+    "build": "pnpm -C packages/gslm build",
+    "example:cli:pull": "node packages/gslm/bin/gslm.js --config example/gslm.toml pull",
+    "example:cli:push": "node packages/gslm/bin/gslm.js --config example/gslm.toml push",
     "release": "bumpp",
     "release:minor": "bumpp minor",
     "release:major": "bumpp major",
     "changelog": "changelogen --output CHANGELOG.md"
   },
-  "dependencies": {
-    "googleapis": "^164.1.0",
-    "lodash-es": "^4.17.21",
-    "yargs": "^17.7.2"
-  },
   "devDependencies": {
-    "@types/lodash-es": "^4.17.12",
-    "@types/node": "^24.9.1",
-    "@types/yargs": "^17.0.33",
     "bumpp": "^10.3.2",
-    "changelogen": "^0.6.2",
-    "dotenv": "^17.2.3",
-    "tsdown": "^0.15.9",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "changelogen": "^0.6.2"
   },
   "packageManager": "pnpm@9.12.3+sha512.cce0f9de9c5a7c95bef944169cc5dfe8741abfb145078c0d508b868056848a87c81e626246cb60967cbd7fd29a6c062ef73ff840d96b3c86c40ac92cf4a813ee"
 }

@@ -40,7 +40,7 @@
     "artifacts": "napi artifacts -d ../../artifacts",
     "create-npm-dirs": "napi create-npm-dirs",
     "version": "napi version",
-    "test": "node --test __tests__/flatten.test.cjs __tests__/conversions.test.cjs __tests__/sheets.test.cjs __tests__/config.test.cjs __tests__/migrate.test.cjs"
+    "test": "node --test __tests__/flatten.test.cjs __tests__/conversions.test.cjs __tests__/sheets.test.cjs __tests__/config.test.cjs __tests__/migrate.test.cjs __tests__/cli.test.cjs"
   },
   "napi": {
     "binaryName": "gslm",

@@ -93,6 +93,60 @@ export interface CredentialsOptions {
  */
 export declare function flatten(value: any, separator?: string | undefined | null): Record<string, any>
 
+/** Controls a high-level pull call from JavaScript. */
+export interface HighLevelPullOptions {
+  dryRun?: boolean
+  force?: boolean
+  /** Test/embedding-only Sheets origin; production callers omit it. */
+  baseUrl?: string
+  /** Test/embedding-only static token; production callers omit it. */
+  accessToken?: string
+}
+
+/** Controls a high-level push call from JavaScript. */
+export interface HighLevelPushOptions {
+  dryRun?: boolean
+  force?: boolean
+  strict?: boolean
+  /** Test/embedding-only Sheets origin; production callers omit it. */
+  baseUrl?: string
+  /** Test/embedding-only static token; production callers omit it. */
+  accessToken?: string
+}
+
+/** A Catalog file affected by pull. */
+export interface JsFileSummary {
+  locale: string
+  path: string
+  keys: number
+  outcome?: string
+}
+
+/** One Locale's key count in a push result. */
+export interface JsLocaleKeyCount {
+  locale: string
+  keys: number
+}
+
+/** Data-only summary returned by a high-level pull. */
+export interface JsPullSummary {
+  target: string
+  files: Array<JsFileSummary>
+  created: number
+  updated: number
+  unchanged: number
+}
+
+/** Data-only summary returned by a high-level push. */
+export interface JsPushSummary {
+  target: string
+  rows: number
+  columns: number
+  localeKeys: Array<JsLocaleKeyCount>
+  orphanKeys: Array<string>
+  warnings: Array<string>
+}
+
 /** Fully resolved config data that is safe to serialize or print. */
 export interface JsResolvedConfig {
   configPath?: string
@@ -146,10 +200,39 @@ export declare function modelToSheet(model: Model): Array<Array<string>>
 export declare function orphanKeys(model: Model): Array<string>
 
 /**
+ * Pull one Target returned by `loadConfig` without reparsing environment
+ * credentials. The hidden credential handle remains entirely in Rust.
+ */
+export declare function pull(target: ConfigTarget, options?: HighLevelPullOptions | undefined | null): Promise<JsPullSummary>
+
+/**
+ * Push one Target returned by `loadConfig` without reparsing environment
+ * credentials. The hidden credential handle remains entirely in Rust.
+ */
+export declare function push(target: ConfigTarget, options?: HighLevelPushOptions | undefined | null): Promise<JsPushSummary>
+
+/**
  * Drop credentials once JavaScript no longer retains the Target that owns
  * this opaque handle. Unknown handles are intentionally harmless.
  */
 export declare function releaseConfigCredentials(handle: string): void
+
+/**
+ * Run the same clap-driven CLI as `bin/gslm.js`, returning its shell exit
+ * code instead of throwing command errors.
+ */
+export declare function runCli(argv: Array<string>, options?: RunCliOptions | undefined | null): Promise<number>
+
+/**
+ * Options for an embedded CLI invocation. Network overrides are intentionally
+ * not public JS API; fixture tests use `GSLM_CLI_BASE_URL` and
+ * `GSLM_CLI_ACCESS_TOKEN` as an environment bridge.
+ */
+export interface RunCliOptions {
+  cwd?: string
+  isTty?: boolean
+  color?: string
+}
 
 export interface SheetsClientOptions {
   credentials?: CredentialsOptions

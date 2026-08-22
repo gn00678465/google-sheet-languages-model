@@ -1,10 +1,32 @@
 # @gn00678465/google-sheet-languages-model (napi-rs 版)
 
-Rust core（`crates/gslm-core`）+ napi-rs 綁定。本套件同時提供 Node SDK 與 `gslm` CLI（ADR-0001、ADR-0002）。
+Rust core（`crates/gslm-*`）+ napi-rs 綁定。本套件同時提供 Node SDK 與完整
+`gslm` CLI。
 
-> 目前完成 spec 0001–0003：暴露 `flatten` / `unflatten` / `sheetToModel` / `modelToSheet` / `orphanKeys` / `version` 與 `SheetsClient`；`gslm` 只支援 `--version`。config、CLI 指令尚未實作。
+## CLI 與 SDK
 
-## SDK 用法（目前可用的部分）
+專案以不可執行的 `gslm.toml`、`gslm.jsonc` 或 `gslm.json` 設定同步工作；可用
+`gslm init` 產生範本，`gslm pull` 從 Sheet 寫入本地 Catalog，`gslm push` 寫回
+Sheet。兩者都有 `--dry-run`，並以 `--force` 保護空來源的危險覆寫；`push --strict`
+會拒絕 Orphan key 和 Catalog 形狀漂移。
+
+```js
+const { loadConfig, pull, push, runCli } = require('@gn00678465/google-sheet-languages-model')
+
+const target = loadConfig({ cwd: process.cwd() }).targets[0]
+await pull(target)
+await push(target, { dryRun: true })
+await runCli(['gslm', 'schema'])
+```
+
+直接保留並傳遞 `loadConfig()` 回傳的 Target。它含有 JavaScript 看不見的 Rust
+憑證 handle；手動複製或 JSON 序列化後的 Target 不可用於 `pull`、`push` 或
+`SheetsClient.fromConfig`。
+
+`migrate` 保留在 JavaScript 入口，沒有相容 native binding 的平台也可執行舊設定
+轉換。
+
+## SheetsClient SDK
 
 ```js
 const { SheetsClient, sheetToModel, modelToSheet } = require('@gn00678465/google-sheet-languages-model')

@@ -199,6 +199,38 @@ pub(crate) fn credentials_for_handle(handle: &str) -> Option<CredentialsSource> 
         .and_then(|credentials| credentials.get(&CredentialHandle(handle.into())).cloned())
 }
 
+/// Rehydrate a safe JS Target into its Rust-only credential-bearing form.
+/// This is deliberately process-local: calling it with a copied JSON value
+/// fails rather than falling back to parsing environment variables again.
+pub(crate) fn resolved_target(target: ConfigTarget) -> Result<ResolvedTarget> {
+    let credentials = credentials_for_handle(&target.credential_handle).ok_or_else(|| {
+        Error::new(
+            Status::InvalidArg,
+            "[CREDENTIALS] Target 不含可用的憑證 handle；請直接使用 loadConfig 回傳的 Target",
+        )
+    })?;
+    let format = match target.format.as_str() {
+        "nest" => Format::Nest,
+        "flat" => Format::Flat,
+        _ => {
+            return Err(Error::new(
+                Status::InvalidArg,
+                "[CONFIG_INVALID] Target 的 format 必須是 nest 或 flat",
+            ));
+        }
+    };
+    Ok(ResolvedTarget {
+        name: target.name,
+        sheet: target.sheet,
+        tab: target.tab,
+        locales: target.locales,
+        path: PathBuf::from(target.path),
+        format,
+        key_separator: target.key_separator,
+        credentials,
+    })
+}
+
 /// Drop credentials once JavaScript no longer retains the Target that owns
 /// this opaque handle. Unknown handles are intentionally harmless.
 #[napi]

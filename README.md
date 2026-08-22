@@ -1,480 +1,95 @@
-# Google Sheet Languages Model - i18n google sheet layer
+# Google Sheet Languages Model
 
-`google-sheet-languages-model` is a npm package that allows you to
-download/upload and parse internationalization (i18n) data between a Google
-Sheet and your local environment. This package provides both a **CLI tool** and a **programmatic API** for managing your i18n data.
+`@gn00678465/google-sheet-languages-model` 同步 Google Sheets 與本地 i18n
+JSON Catalog。它提供 `gslm` 指令，以及可嵌入的 Node API；轉換、設定、檔案
+處理與 Sheets I/O 都由 Rust 實作。
 
-## Quick Start
-
-```bash
-# 1. Install the package
-pnpm add -D google-sheet-languages-model
-
-# 2. Pull i18n data from Google Sheet
-npx gslm pull \
-  --sheet-id YOUR_SHEET_ID \
-  --sheet-title "Sheet1" \
-  --credentials ./credentials.json \
-  --directory ./i18n \
-  --languages en es fr
-
-# 3. Push i18n data to Google Sheet
-npx gslm push \
-  --sheet-id YOUR_SHEET_ID \
-  --sheet-title "Sheet1" \
-  --credentials ./credentials.json \
-  --directory ./i18n \
-  --languages en es fr
-```
-
-## Installation
-
-### From GitHub Package Registry
+## 安裝
 
 ```bash
-# Configure npm to use GitHub Package Registry for @gn00678465 scope
-echo "@gn00678465:registry=https://npm.pkg.github.com" >> .npmrc
-
-# Install the package
 pnpm add -D @gn00678465/google-sheet-languages-model
 ```
 
-### For CLI Usage (Recommended)
+請先啟用 Google Sheets API、建立 service account，並把該帳號的 email 以編輯者
+身分分享給目標 Spreadsheet。
 
-Install the package globally or as a dev dependency:
+## 快速開始
+
+在專案根目錄建立 `gslm.toml`：
+
+```toml
+#:schema https://gn00678465.github.io/google-sheet-languages-model/schema/v1.json
+version = 1
+sheet = "YOUR_GOOGLE_SHEET_ID"
+tab = "i18n"
+locales = ["en", "zh-TW"]
+path = "locales/{locale}.json"
+format = "nest"
+
+[credentials]
+file = "./service-account.json"
+```
+
+第一個 Locale 是來源語言，並決定 Sheet 的 key 順序。`path` 必須含有
+`{locale}`。可使用 `credentials.env = "GSLM_CREDENTIALS_JSON"` 讓憑證來自
+環境變數，或省略 `credentials` 使用 Application Default Credentials。
 
 ```bash
-# Global installation
-npm install -g @gn00678465/google-sheet-languages-model
+# 先建立可註解的設定範本
+gslm init
 
-# Or as dev dependency
-pnpm add -D @gn00678465/google-sheet-languages-model
+# 從 Sheet 寫入本地 JSON
+gslm pull
+
+# 先預覽，確認後再寫回 Sheet
+gslm push --dry-run
+gslm push
 ```
 
-### For Programmatic API Usage
+`pull` 不會用空 Sheet 覆蓋非空本地 Catalog，`push` 不會把全空本地檔案寫回
+Sheet；兩種情況都必須明確加上 `--force`。`push` 會警告只在非來源 Locale 存在的
+Orphan key，CI 可用 `--strict` 將此警告和檔案格式漂移視為錯誤。
 
-If you need to use the package programmatically in your code:
+## 指令
+
+```text
+gslm pull [--dry-run] [--force] [--config path] [--target names]
+gslm push [--dry-run] [--force] [--strict] [--config path] [--target names]
+gslm init [--format toml|jsonc] [--force]
+gslm schema > gslm.schema.json
+gslm migrate [--from legacy-config] [--write] [--force]
+```
+
+`--target` 可重複或以逗號分隔。`--sheet`、`--tab`、`--locales`、`--path`、
+`--format`、`--key-separator`、`--credentials` 是對設定檔的暫時覆寫；多 Target
+時欄位覆寫必須同時指定恰好一個 Target。可用 `--no-dotenv` 停用 `.env`。
+
+設定檔只支援 `gslm.toml`、`gslm.jsonc`、`gslm.json`；舊的可執行
+`gslm.config.*` 可透過 `gslm migrate` 轉換。migration 保留在 JavaScript，故即使
+系統沒有對應的原生 binding 仍可使用。
+
+## Node API
+
+```js
+const { loadConfig, pull, push, runCli } = require('@gn00678465/google-sheet-languages-model')
+
+const target = loadConfig({ cwd: process.cwd() }).targets[0]
+await pull(target)
+await push(target, { dryRun: true })
+const code = await runCli(['gslm', 'schema'])
+```
+
+請直接傳遞 `loadConfig()` 回傳的 Target。憑證內容保留在 Rust 的不透明 handle
+中，序列化後重新建立的物件無法用於 `pull`、`push` 或 `SheetsClient.fromConfig`。
+
+## 開發
 
 ```bash
-pnpm add -D google-sheet-languages-model
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+pnpm -C packages/gslm build:debug
+pnpm -C packages/gslm test
 ```
 
-> **Note**: Starting from v0.5.0, `googleapis` is now included as a direct dependency. You no longer need to install it separately.
-
-## Authorization
-
-It's recommended to use the
-[Service Account](https://developers.google.com/workspace/guides/create-credentials#service-account)
-auth option to interact with the Google Sheets API. Follow these steps to set up
-the authorization:
-
-1. Enable the Google Sheets API permission for your project in the
-   [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a new Service Account or use an existing one, and add it as an editor
-   to your working sheet.
-3. Download the `credentials.json` file which is generated from the Service
-   Account and place it in your project directory.
-4. Share your Google Sheet with the email address provided in the `client_email`
-   field inside the `credentials.json` file.
-5. Set the Google Sheet ID from your Google Sheet URL (the part between `/d/` and `/edit`).
-
-## CLI Usage
-
-The CLI tool provides a simple way to sync i18n data without writing any code.
-
-### Pull Command
-
-Download i18n data from Google Sheet to local JSON files:
-
-```bash
-# Using npx (if installed locally)
-npx gslm pull \
-  --sheet-id YOUR_SHEET_ID \
-  --sheet-title "Sheet1" \
-  --credentials ./credentials.json \
-  --directory ./i18n \
-  --languages en,es,fr \
-  --type nest
-
-# Or using global installation
-gslm pull -s YOUR_SHEET_ID -t "Sheet1" -c ./credentials.json -d ./i18n -l en,es,fr
-```
-
-**Options:**
-
-- `-s, --sheet-id` (required): Google Sheet ID
-- `-t, --sheet-title` (required): Sheet title/tab name
-- `-c, --credentials` (required): Path to credentials.json file
-- `-d, --directory` (required): Directory for translation files
-- `-l, --languages` (required): Comma-separated language codes (e.g., en,es,fr,ja,zh)
-- `--type` (optional): Output structure type - `nest` or `flat` (default: nest)
-
-### Push Command
-
-Upload i18n data from local JSON files to Google Sheet:
-
-```bash
-# Using npx (if installed locally)
-npx gslm push \
-  --sheet-id YOUR_SHEET_ID \
-  --sheet-title "Sheet1" \
-  --credentials ./credentials.json \
-  --directory ./i18n \
-  --languages en,es,fr
-
-# Or using global installation
-gslm push -s YOUR_SHEET_ID -t "Sheet1" -c ./credentials.json -d ./i18n -l en,es,fr
-```
-
-**Options:**
-
-- `-s, --sheet-id` (required): Google Sheet ID
-- `-t, --sheet-title` (required): Sheet title/tab name
-- `-c, --credentials` (required): Path to credentials.json file
-- `-d, --directory` (required): Directory containing JSON files
-- `-l, --languages` (required): Comma-separated language codes (e.g., en,es,fr,ja,zh)
-
-> **Note**: Push command automatically detects the file structure (nest or flat) from your JSON files.
-
-### Environment Variable
-
-You can also set credentials using the `GOOGLE_APPLICATION_CREDENTIALS` environment variable:
-
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
-gslm pull -s YOUR_SHEET_ID -t "Sheet1" -d ./i18n -l en,es,fr
-```
-
-### Using CLI in npm Scripts
-
-When you install the package locally (non-globally), you can add commands to your `package.json` scripts.
-
-#### Method 1: Using Config File (Recommended)
-
-Create a `gslm.config.js` file in your project root:
-
-```javascript
-// gslm.config.js
-export default {
-  sheetId: process.env.SHEET_ID || 'YOUR_SHEET_ID_HERE',
-  sheetTitle: 'i18n-demo',
-  credentials: './credentials.json',
-  languages: ['en', 'zh', 'ja', 'fr', 'es'],
-  directory: './i18n', // Used for both input and output
-  type: 'nest', // or 'flat'
-}
-```
-
-**Alternative: Import credentials directly as object**
-
-```javascript
-// gslm.config.js
-import credentials from './credentials.json' with { type: 'json' }
-
-export default {
-  sheetId: process.env.SHEET_ID,
-  sheetTitle: 'i18n-demo',
-  credentials: credentials, // Pass the object directly (no file path needed)
-  languages: ['en', 'zh', 'ja', 'fr', 'es'],
-  directory: './i18n',
-  type: 'nest',
-}
-```
-
-Then in your `package.json`:
-
-```json
-{
-  "scripts": {
-    "i18n:pull": "gslm pull --config gslm.config.js",
-    "i18n:push": "gslm push --config gslm.config.js"
-  }
-}
-```
-
-**Benefits:**
-- ✅ No cross-platform issues (works on Windows, Mac, Linux)
-- ✅ Clean and simple scripts
-- ✅ Centralized configuration
-- ✅ Can override config values with CLI arguments
-- ✅ Can import credentials as object or use file path
-
-**Config Options:**
-- `sheetId` (string): Google Sheet ID
-- `sheetTitle` (string): Sheet title/tab name
-- `credentials` (string | object): Path to credentials.json OR credentials object
-- `languages` (string[]): Array of language codes
-- `directory` (string): Directory for translation files (used for both pull/push)
-- `type` (string): File structure type - 'nest' or 'flat' (only for pull command)
-
-**Supported config file formats:**
-- `.js` - JavaScript (ESM)
-- `.mjs` - JavaScript (ESM)
-- `.cjs` - JavaScript (CommonJS)
-- `.ts` - TypeScript (requires tsx or ts-node)
-
-#### Method 2: Direct CLI Arguments
-
-```json
-{
-  "scripts": {
-    "i18n:pull": "gslm pull -s YOUR_SHEET_ID -t Sheet1 -c ./credentials.json -d ./i18n -l en,es,fr,ja,zh",
-    "i18n:push": "gslm push -s YOUR_SHEET_ID -t Sheet1 -c ./credentials.json -d ./i18n -l en,es,fr,ja,zh",
-    "i18n:pull:flat": "gslm pull -s YOUR_SHEET_ID -t Sheet1 -c ./credentials.json -d ./i18n -l en,es,fr --type flat"
-  }
-}
-```
-
-Then run:
-
-```bash
-pnpm i18n:pull   # Pull from Google Sheet
-pnpm i18n:push   # Push to Google Sheet
-```
-
-#### Method 3: Using Environment Variables
-
-**Using Environment Variables in Scripts:**
-
-You can use `.env` file with environment variables:
-
-```bash
-# .env
-SHEET_ID=your_google_sheet_id_here
-```
-
-Then in your `package.json`:
-
-```json
-{
-  "scripts": {
-    "i18n:pull": "gslm pull -s $SHEET_ID -t Sheet1 -c ./credentials.json -d ./i18n -l en,es,fr",
-    "i18n:push": "gslm push -s $SHEET_ID -t Sheet1 -c ./credentials.json -d ./i18n -l en,es,fr"
-  }
-}
-```
-
-> **Note**: On Windows PowerShell, use `$env:SHEET_ID` instead of `$SHEET_ID`, or use a package like `cross-env` for cross-platform compatibility.
-
-#### Mixing Config File with CLI Arguments
-
-CLI arguments take precedence over config file settings:
-
-```bash
-# Use config file but override directory
-gslm pull --config gslm.config.js --directory ./locales
-```
-
-This is useful for:
-- Testing different configurations
-- Using same config with different directory paths
-- Overriding specific values without modifying the config file
-
-## Programmatic API Usage
-
-## Programmatic API Usage
-
-If you need more control or want to integrate the package into your application, you can use the programmatic API.
-
-Firstly, import the necessary modules from the package and your configuration:
-
-```typescript
-import { GoogleSheetLanguagesModel } from 'google-sheet-languages-model'
-import { auth, folderPath, languages, SHEET_ID } from './config.ts'
-```
-
-### Download and Parse Data to Local
-
-Here is an example of how to download and parse i18n data from a Google Sheet
-and save it to a local folder:
-
-```typescript
-const googleSheetLanguagesModel = new GoogleSheetLanguagesModel({
-  sheetId: SHEET_ID,
-  auth,
-})
-
-const languagesModel = await googleSheetLanguagesModel.loadFromGoogleSheet(
-  'Test',
-  languages,
-)
-
-languagesModel.saveToFolder(folderPath, 'nest')
-
-console.log('pull done')
-```
-
-### Upload Data to Google Sheet
-
-Here is an example of how to upload i18n data from a local folder to a Google
-Sheet:
-
-```typescript
-const languagesModel = GoogleSheetLanguagesModel.loadFromFolder(
-  folderPath,
-  languages,
-)
-
-const googleSheetLanguagesModel = new GoogleSheetLanguagesModel({
-  sheetId: SHEET_ID,
-  auth,
-})
-
-await googleSheetLanguagesModel.saveToGoogleSheet('Test', languagesModel)
-
-console.log('push done')
-```
-
-### Configuration
-
-Your `config.ts` should export the following variables:
-
-- `SHEET_ID`: The ID of your Google Sheet.
-- `languages`: An array of language codes (e.g., `['en', 'es', 'fr']`).
-- `auth`: Your authorization credentials.
-- `folderPath`: The path to the folder where you want to save or load the
-  language files.
-
-### Examples
-
-For programmatic usage examples:
-
-- Pull i18n from google sheet to local folder.
-  ([link](https://github.com/gn00678465/google-sheet-languages-model/blob/main/example/pull.ts))
-- Push i18n from local folder to google sheet.
-  ([link](https://github.com/gn00678465/google-sheet-languages-model/blob/main/example/push.ts))
-
-## Migration Guide
-
-### Migrating from v0.4.x to v0.5.0
-
-**Breaking Changes:**
-
-1. **`googleapis` is now a direct dependency**: You no longer need to install `googleapis` separately. Remove it from your `package.json` if you were only using it for this package.
-
-   ```bash
-   # Before (v0.4.x)
-   pnpm add -D google-sheet-languages-model googleapis
-   
-   # After (v0.5.0)
-   pnpm add -D google-sheet-languages-model
-   ```
-
-2. **CLI tool added**: The package now includes a CLI tool (`gslm`) that can be used without writing any code. You can still use the programmatic API as before.
-
-**What stays the same:**
-
-- All programmatic APIs remain unchanged and backward compatible
-- The same authentication methods are supported
-- Configuration files and examples continue to work as before
-
-## Documentation
-
-The main classes and methods are documented in the source code provided. This
-will guide you on the data structures and the methods available for use.
-
-Feel free to explore the provided code to better understand how to work with the
-`google-sheet-languages-model` package to manage your i18n data.
-
-## Data Structures for i18n File Data
-
-The `google-sheet-languages-model` package supports two different structures to
-describe i18n file data: `nest` (JS object style) and `flat` (key annotation
-style). Both styles serve to organize your internationalization data in a manner
-that best suits your project's needs.
-
-### 1. Nest (JS Object Style)
-
-In the `nest` structure, i18n data is organized in a nested JavaScript object
-format, where each key represents a nesting level. This structure is intuitive
-and easy to navigate, making it a good choice for projects with a hierarchical
-data organization.
-
-Example:
-
-```javascript
-{
-  "user": {
-    "name": "Name",
-    "age": "Age"
-  },
-  "messages": {
-    "welcome": "Welcome"
-  }
-}
-```
-
-### 2. Flat (Key Annotation Style)
-
-The `flat` structure, on the other hand, uses a single-level object with keys
-representing the path to the value in a dot notation. This structure is simple
-and often preferred in projects with a flat data organization.
-
-Example:
-
-```javascript
-{
-  "user.name": "Name",
-  "user.age": "Age",
-  "messages.welcome": "Welcome"
-}
-```
-
-You can choose either of these structures based on your project requirements.
-The method `languagesModel.saveToFolder(folderPath, structureStyle)` allows you
-to specify the structure style as `'nest'` or `'flat'` when saving the i18n data
-to a local folder. Similarly, when loading data from a folder using
-`GoogleSheetLanguagesModel.loadFromFolder(folderPath, languages, structureStyle)`,
-you can specify the structure style to match the organization of your i18n data.
-
-Example:
-
-```typescript
-// Saving data in nest structure
-languagesModel.saveToFolder(folderPath, 'nest')
-
-// Or, saving data in flat structure
-languagesModel.saveToFolder(folderPath, 'flat')
-```
-
-This flexibility allows you to work with the i18n data in a way that's most
-convenient and logical for your project's organization.
-
-## Release Process
-
-This package uses automated versioning and publishing:
-
-1. **Make changes** following [Conventional Commits](https://www.conventionalcommits.org/)
-2. **Run release script**:
-   ```bash
-   # For patch version (0.5.0 -> 0.5.1)
-   pnpm release
-
-   # For minor version (0.5.0 -> 0.6.0)
-   pnpm release:minor
-
-   # For major version (0.5.0 -> 1.0.0)
-   pnpm release:major
-   ```
-3. **Automated workflow** publishes to GitHub Package Registry
-4. **GitHub Release** is created automatically with changelog
-
-### Commit Message Format
-
-Follow Conventional Commits specification:
-
-- `feat:` - New features (triggers minor version bump)
-- `fix:` - Bug fixes (triggers patch version bump)
-- `docs:` - Documentation changes
-- `refactor:` - Code refactoring
-- `test:` - Adding or updating tests
-- `chore:` - Maintenance tasks
-- `build:` - Build system changes
-- `ci:` - CI/CD changes
-
-Example: `feat(cli): add support for environment variables`
-
-## Contributing
-
-If you encounter any issues or have features requests, feel free to open an
-issue or submit a pull request. Your contributions are welcome!
+範例設定和指令見 [example](example/README.md)。

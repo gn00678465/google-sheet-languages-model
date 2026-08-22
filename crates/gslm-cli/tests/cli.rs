@@ -1,0 +1,396 @@
+use gslm_cli::{RunOptions, SheetsOverride, run};
+use serde_json::json;
+use std::fs;
+use std::io::Write;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use tempfile::TempDir;
+use wiremock::matchers::{body_json, method};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+#[derive(Clone)]
+struct SharedWriter(Arc<Mutex<Vec<u8>>>);
+
+impl Write for SharedWriter {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn schema_writes_the_config_schema_to_stdout() {
+    let stdout = Arc::new(Mutex::new(Vec::new()));
+    let stderr = Arc::new(Mutex::new(Vec::new()));
+    let options = RunOptions {
+        stdout: Box::new(SharedWriter(stdout.clone())),
+        stderr: Box::new(SharedWriter(stderr)),
+        ..RunOptions::default()
+    };
+
+    assert_eq!(run(vec!["gslm".into(), "schema".into()], options), 0);
+    let actual: serde_json::Value = serde_json::from_slice(&stdout.lock().unwrap()).unwrap();
+    assert_eq!(actual, gslm_config::schema());
+}
+
+#[test]
+fn version_uses_the_embedding_package_version() {
+    let stdout = Arc::new(Mutex::new(Vec::new()));
+    let options = RunOptions {
+        stdout: Box::new(SharedWriter(stdout.clone())),
+        version: Some("9.8.7"),
+        ..RunOptions::default()
+    };
+
+    assert_eq!(run(vec!["gslm".into(), "--version".into()], options), 0);
+    assert_eq!(
+        String::from_utf8(stdout.lock().unwrap().clone()).unwrap(),
+        "gslm 9.8.7\n"
+    );
+}
+
+fn project(format: &str) -> TempDir {
+    let project = tempfile::tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        format!(
+            r#"version = 1
+sheet = "sheet-id"
+tab = "i18n"
+locales = ["en", "zh-TW"]
+path = "locales/{{locale}}.json"
+format = "{format}"
+"#
+        ),
+    )
+    .unwrap();
+    project
+}
+
+fn multi_project() -> TempDir {
+    let project = tempfile::tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        r#"version = 1
+path = "locales/{locale}.json"
+format = "nest"
+
+[[targets]]
+name = "one"
+sheet = "one"
+tab = "i18n"
+locales = ["en", "zh-TW"]
+
+[[targets]]
+name = "two"
+sheet = "two"
+tab = "i18n"
+locales = ["en", "zh-TW"]
+"#,
+    )
+    .unwrap();
+    project
+}
+
+fn execute(project: &Path, server: &MockServer, args: &[&str]) -> (i32, String, String) {
+    let stdout = Arc::new(Mutex::new(Vec::new()));
+    let stderr = Arc::new(Mutex::new(Vec::new()));
+    let options = RunOptions {
+        cwd: project.to_path_buf(),
+        stdout: Box::new(SharedWriter(stdout.clone())),
+        stderr: Box::new(SharedWriter(stderr.clone())),
+        sheets: SheetsOverride {
+            base_url: Some(server.uri()),
+            access_token: Some("test-token".into()),
+        },
+        ..RunOptions::default()
+    };
+    let argv = std::iter::once("gslm")
+        .chain(args.iter().copied())
+        .map(String::from)
+        .collect();
+    let code = std::thread::spawn(move || run(argv, options))
+        .join()
+        .unwrap();
+    let stdout = String::from_utf8(stdout.lock().unwrap().clone()).unwrap();
+    let stderr = String::from_utf8(stderr.lock().unwrap().clone()).unwrap();
+    (code, stdout, stderr)
+}
+
+fn sheet(rows: serde_json::Value) -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({ "values": rows }))
+}
+
+#[tokio::test]
+async fn pull_writes_nested_catalogs_creates_directories_and_detects_unchanged() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([
+            ["key", "en", "zh-TW"],
+            ["app.title", "Title", "標題"],
+            ["missing", "Present", ""]
+        ])))
+        .expect(3)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        fs::read_to_string(project.path().join("locales/en.json")).unwrap(),
+        "{\n  \"app\": {\n    \"title\": \"Title\"\n  },\n  \"missing\": \"Present\"\n}\n"
+    );
+    assert_eq!(
+        fs::read_to_string(project.path().join("locales/zh-TW.json")).unwrap(),
+        "{\n  \"app\": {\n    \"title\": \"標題\"\n  }\n}\n"
+    );
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull", "--verbose"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("詳細：讀取 Sheet sheet-id 的 Tab i18n"));
+    assert!(stderr.contains("Catalog："));
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("未變動 2"));
+}
+
+#[tokio::test]
+async fn pull_writes_flat_and_dry_run_keeps_the_filesystem_untouched() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([
+            ["key", "en", "zh-TW"],
+            ["app.title", "Title", "標題"]
+        ])))
+        .expect(2)
+        .mount(&server)
+        .await;
+    let project = project("flat");
+
+    let (code, stdout, stderr) = execute(project.path(), &server, &["pull", "--dry-run"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("預覽模式"));
+    assert!(!project.path().join("locales/en.json").exists());
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        fs::read_to_string(project.path().join("locales/en.json")).unwrap(),
+        "{\n  \"app.title\": \"Title\"\n}\n"
+    );
+}
+
+#[tokio::test]
+async fn pull_rejects_empty_sheet_before_overwriting_local_catalog_unless_forced() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([["key", "en", "zh-TW"]])))
+        .expect(2)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+    fs::create_dir(project.path().join("locales")).unwrap();
+    let local = project.path().join("locales/en.json");
+    fs::write(&local, "{\"kept\":\"value\"}\n").unwrap();
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[PULL_EMPTY_SHEET]"));
+    assert!(fs::read_to_string(&local).unwrap().contains("kept"));
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull", "--force"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(fs::read_to_string(local).unwrap(), "{}\n");
+}
+
+#[tokio::test]
+async fn push_writes_orphans_at_the_end_and_reports_them() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("PUT"))
+        .and(body_json(json!({
+            "range": "'i18n'!A1",
+            "majorDimension": "ROWS",
+            "values": [["key", "en", "zh-TW"], ["a", "A", "甲"], ["orphan", "", "孤兒"]]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+    fs::create_dir(project.path().join("locales")).unwrap();
+    fs::write(project.path().join("locales/en.json"), "{\"a\":\"A\"}\n").unwrap();
+    fs::write(
+        project.path().join("locales/zh-TW.json"),
+        "{\"a\":\"甲\",\"orphan\":\"孤兒\"}\n",
+    )
+    .unwrap();
+
+    let (code, _, stderr) = execute(project.path(), &server, &["push"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("孤立 key"));
+}
+
+#[tokio::test]
+async fn push_explains_when_the_tab_was_cleared_before_a_write_failure() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(503).set_body_json(json!({
+            "error": { "code": 503, "message": "backend", "status": "UNAVAILABLE" }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+    fs::create_dir(project.path().join("locales")).unwrap();
+    fs::write(project.path().join("locales/en.json"), "{\"ok\":\"OK\"}\n").unwrap();
+    fs::write(
+        project.path().join("locales/zh-TW.json"),
+        "{\"ok\":\"好\"}\n",
+    )
+    .unwrap();
+
+    let (code, _, stderr) = execute(project.path(), &server, &["push"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[WRITE_AFTER_CLEAR_FAILED]"));
+    assert!(stderr.contains("Tab 已被清空但寫入失敗，請重試 push"));
+}
+
+#[tokio::test]
+async fn push_protects_empty_local_and_strict_rejects_orphans_and_shape_drift() {
+    let server = MockServer::start().await;
+    let project = project("flat");
+    let (code, _, stderr) = execute(project.path(), &server, &["push"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[PUSH_EMPTY_LOCAL]"));
+
+    fs::create_dir(project.path().join("locales")).unwrap();
+    fs::write(
+        project.path().join("locales/en.json"),
+        "{\"nested\":{\"a\":\"A\"}}\n",
+    )
+    .unwrap();
+    fs::write(
+        project.path().join("locales/zh-TW.json"),
+        "{\"orphan\":\"孤兒\"}\n",
+    )
+    .unwrap();
+    let (code, stdout, stderr) = execute(project.path(), &server, &["push", "--dry-run"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("預覽模式"));
+    assert!(stdout.contains("孤立 key"));
+    assert!(stderr.contains("實際形狀"));
+    let (code, _, stderr) = execute(project.path(), &server, &["push", "--strict"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[PUSH_STRICT]"));
+    assert!(stderr.contains("實際形狀"));
+    assert!(stderr.contains("孤立 key"));
+}
+
+#[tokio::test]
+async fn push_bad_json_names_the_catalog_path_and_dry_run_skips_writes() {
+    let server = MockServer::start().await;
+    let project = project("nest");
+    fs::create_dir(project.path().join("locales")).unwrap();
+    let bad = project.path().join("locales/en.json");
+    fs::write(&bad, "not json").unwrap();
+    let (code, _, stderr) = execute(project.path(), &server, &["push"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[CATALOG]"));
+    assert!(stderr.contains(&bad.display().to_string()));
+
+    fs::write(&bad, "{\"ok\":\"OK\"}").unwrap();
+    fs::write(project.path().join("locales/zh-TW.json"), "{\"ok\":\"好\"}").unwrap();
+    let (code, stdout, stderr) = execute(project.path(), &server, &["push", "--dry-run"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("預覽模式"));
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn multiple_targets_can_be_filtered_and_ambiguous_overrides_are_rejected() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([["key", "en", "zh-TW"], ["a", "A", "甲"]])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = multi_project();
+    let (code, _, stderr) = execute(project.path(), &server, &["pull", "--target", "two"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("目標 two"));
+    assert!(!stderr.contains("目標 one"));
+    let (code, _, stderr) = execute(project.path(), &server, &["pull", "--sheet", "override"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[CONFIG_INVALID]"));
+    let (code, _, stderr) = execute(project.path(), &server, &["pull", "--target", ""]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("找不到 Target"));
+}
+
+#[tokio::test]
+async fn init_template_loads_and_usage_version_and_round_trip_work() {
+    let server = MockServer::start().await;
+    let project = tempfile::tempdir().unwrap();
+    let (code, _, stderr) = execute(project.path(), &server, &["init"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        gslm_config::load(gslm_config::LoadOptions {
+            cwd: project.path().to_path_buf(),
+            env: Default::default(),
+            ..Default::default()
+        })
+        .is_ok()
+    );
+    let (code, _, _) = execute(project.path(), &server, &["unknown"]);
+    assert_eq!(code, 2);
+    let (code, stdout, _) = execute(project.path(), &server, &["--version"]);
+    assert_eq!(code, 0);
+    assert!(stdout.starts_with("gslm "));
+
+    fs::write(
+        project.path().join("gslm.toml"),
+        r#"version = 1
+sheet = "sheet-id"
+tab = "i18n"
+locales = ["en", "zh-TW"]
+path = "locales/{locale}.json"
+format = "nest"
+"#,
+    )
+    .unwrap();
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([["key", "en", "zh-TW"], ["a", "A", "甲"]])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+    assert_eq!(code, 0, "{stderr}");
+    let (code, _, stderr) = execute(project.path(), &server, &["push"]);
+    assert_eq!(code, 0, "{stderr}");
+}

@@ -3,8 +3,13 @@
 //! Thin napi-rs wrapper over `gslm-core`. No logic lives here: every function
 //! converts JS values to core types, calls core, and maps errors to JS `Error`.
 
+mod cli;
 pub mod config;
 mod sheets;
+
+// napi-rs exports these free functions through their attributes; re-exporting
+// also makes their Rust reachability explicit for clippy's test target.
+pub use cli::{pull, push, run_cli};
 
 use gslm_core::{Catalog, ConversionError, DEFAULT_SEPARATOR, Model};
 use indexmap::IndexMap;
