@@ -3,6 +3,7 @@
 //! Thin napi-rs wrapper over `gslm-core`. No logic lives here: every function
 //! converts JS values to core types, calls core, and maps errors to JS `Error`.
 
+pub mod config;
 mod sheets;
 
 use gslm_core::{Catalog, ConversionError, DEFAULT_SEPARATOR, Model};

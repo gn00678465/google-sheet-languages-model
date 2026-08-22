@@ -62,6 +62,41 @@ fn credentials_from(opts: Option<CredentialsOptions>) -> Result<Credentials> {
     })
 }
 
+fn credentials_from_target(target: &crate::config::ConfigTarget) -> Result<Credentials> {
+    match target.credentials.kind.as_str() {
+        "file" => target
+            .credentials
+            .path
+            .as_ref()
+            .map(|path| Credentials::ServiceAccountFile(path.into()))
+            .ok_or_else(|| credentials_error("config Target 的 file credentials 缺少 path")),
+        "json" => {
+            let env_name =
+                target.credentials.env.as_ref().ok_or_else(|| {
+                    credentials_error("config Target 的 json credentials 缺少 env")
+                })?;
+            let json = std::env::var(env_name)
+                .ok()
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| credentials_error(&format!("缺少或為空的環境變數 {env_name}")))?;
+            Ok(Credentials::ServiceAccountJson(json))
+        }
+        "adc" => Ok(Credentials::ApplicationDefault),
+        kind => Err(credentials_error(&format!(
+            "config Target 的 credentials.kind 不支援 `{kind}`"
+        ))),
+    }
+}
+
+async fn build_client(credentials: Credentials, base_url: Option<String>) -> Result<SheetsClient> {
+    let mut builder = gslm_sheets::SheetsClient::builder(credentials);
+    if let Some(url) = base_url {
+        builder = builder.base_url(url);
+    }
+    let inner = builder.build().await.map_err(to_js)?;
+    Ok(SheetsClient { inner })
+}
+
 /// Reads and writes whole Tabs of a Google Sheet.
 #[napi]
 pub struct SheetsClient {
@@ -76,12 +111,15 @@ impl SheetsClient {
     pub async fn create(options: Option<SheetsClientOptions>) -> Result<SheetsClient> {
         let options = options.unwrap_or_default();
         let creds = credentials_from(options.credentials)?;
-        let mut builder = gslm_sheets::SheetsClient::builder(creds);
-        if let Some(url) = options.base_url {
-            builder = builder.base_url(url);
-        }
-        let inner = builder.build().await.map_err(to_js)?;
-        Ok(SheetsClient { inner })
+        build_client(creds, options.base_url).await
+    }
+
+    /// Create a client from a Target returned by `loadConfig`. JSON
+    /// credentials are read from their named environment variable here, so no
+    /// secret crosses the JavaScript boundary.
+    #[napi(factory)]
+    pub async fn from_config(target: crate::config::ConfigTarget) -> Result<SheetsClient> {
+        build_client(credentials_from_target(&target)?, None).await
     }
 
     /// Read the whole tab as rows of strings (header row first). Feed the

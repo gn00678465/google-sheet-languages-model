@@ -8,6 +8,12 @@ export declare class SheetsClient {
    */
   static create(options?: SheetsClientOptions | undefined | null): Promise<SheetsClient>
   /**
+   * Create a client from a Target returned by `loadConfig`. JSON
+   * credentials are read from their named environment variable here, so no
+   * secret crosses the JavaScript boundary.
+   */
+  static fromConfig(target: ConfigTarget): Promise<SheetsClient>
+  /**
    * Read the whole tab as rows of strings (header row first). Feed the
    * result to `sheetToModel`.
    */
@@ -17,6 +23,40 @@ export declare class SheetsClient {
    * RAW input). Use `modelToSheet` to build `rows`.
    */
   writeTab(sheetId: string, tab: string, rows: Array<Array<string>>): Promise<void>
+}
+
+/** Safe credential metadata. It never contains credential JSON. */
+export interface ConfigCredentials {
+  kind: string
+  path?: string
+  env?: string
+}
+
+/** CLI-style overrides with the same precedence and validation as `GSLM_*`. */
+export interface ConfigOverrides {
+  sheet?: string
+  tab?: string
+  locales?: Array<string>
+  path?: string
+  format?: string
+  keySeparator?: string
+  credentials?: string
+  credentialsJson?: string
+}
+
+/** JSON Schema draft 2020-12 generated from the Rust raw-config types. */
+export declare function configSchema(): any
+
+/** A Target ready for pull or push. `path` is an absolute template. */
+export interface ConfigTarget {
+  name: string
+  sheet: string
+  tab: string
+  locales: Array<string>
+  path: string
+  format: string
+  keySeparator: string
+  credentials: ConfigCredentials
 }
 
 /**
@@ -40,6 +80,32 @@ export interface CredentialsOptions {
  * or if `separator` is empty.
  */
 export declare function flatten(value: any, separator?: string | undefined | null): Record<string, any>
+
+/** Fully resolved config data that is safe to serialize or print. */
+export interface JsResolvedConfig {
+  configPath?: string
+  targets: Array<ConfigTarget>
+  warnings: Array<string>
+}
+
+/**
+ * Discover and load the config synchronously. File I/O is intentionally
+ * small, and all errors carry a stable `[CONFIG_*]` prefix for `index.js`.
+ */
+export declare function loadConfig(options?: LoadConfigOptions | undefined | null): JsResolvedConfig
+
+/**
+ * Options accepted by [`load_config`]. `env` is mainly useful for tests and
+ * embedded callers that need an isolated process environment.
+ */
+export interface LoadConfigOptions {
+  cwd?: string
+  configPath?: string
+  env?: Record<string, string>
+  overrides?: ConfigOverrides
+  targets?: Array<string>
+  loadDotenv?: boolean
+}
 
 /**
  * A Model as plain data: an ordered list of locales (the first is the Source

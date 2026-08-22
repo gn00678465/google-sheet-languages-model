@@ -12,6 +12,72 @@ export {
   type SheetsClientOptions,
 } from './binding'
 
+export interface ConfigCredentials {
+  kind: 'file' | 'json' | 'adc'
+  path?: string
+  env?: string
+}
+
+export interface ResolvedTarget {
+  name: string
+  sheet: string
+  tab: string
+  locales: string[]
+  path: string
+  format: 'nest' | 'flat'
+  keySeparator: string
+  credentials: ConfigCredentials
+}
+
+export interface ResolvedConfig {
+  configPath?: string
+  targets: ResolvedTarget[]
+  warnings: string[]
+}
+
+export interface ConfigOverrides {
+  sheet?: string
+  tab?: string
+  locales?: string[]
+  path?: string
+  format?: 'nest' | 'flat'
+  keySeparator?: string
+  credentials?: string
+  credentialsJson?: string
+}
+
+export interface LoadConfigOptions {
+  cwd?: string
+  configPath?: string
+  env?: Record<string, string>
+  overrides?: ConfigOverrides
+  targets?: string[]
+  loadDotenv?: boolean
+}
+
+export interface ConfigError extends Error {
+  code:
+    | 'CONFIG_NOT_FOUND'
+    | 'CONFIG_PARSE'
+    | 'CONFIG_INVALID'
+    | 'CONFIG_LEGACY'
+    | 'CONFIG_UNSUPPORTED'
+    | 'CONFIG_UNSUPPORTED_VERSION'
+}
+
+/** Discover, validate, and resolve config into safe, absolute Target data. */
+export declare function loadConfig(options?: LoadConfigOptions | undefined | null): ResolvedConfig
+/** JSON Schema draft 2020-12 generated from the Rust config types. */
+export declare function configSchema(): Record<string, unknown>
+
+export interface LegacyMigrationResult {
+  toml: string
+  warnings: string[]
+}
+
+/** Convert a loaded legacy executable-config object into safe TOML text. */
+export declare function migrateLegacyConfig(legacy: unknown): LegacyMigrationResult
+
 /** Stable error codes set on `error.code` by `SheetsClient` methods. */
 export type SheetsErrorCode =
   | 'CREDENTIALS'
@@ -39,6 +105,8 @@ export declare class SheetsClient {
    * `SheetsError`.
    */
   static create(options?: SheetsClientOptions | undefined | null): Promise<SheetsClient>
+  /** Create a client from a Target returned by `loadConfig`. */
+  static fromConfig(target: ResolvedTarget): Promise<SheetsClient>
   /** Read the whole tab as rows of strings (header row first). Feed the result to `sheetToModel`. */
   readTab(sheetId: string, tab: string): Promise<Array<Array<string>>>
   /** Replace the tab's content with `rows` (clear, then write from A1 with RAW input). */
