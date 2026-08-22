@@ -1,6 +1,6 @@
 //! napi wrapper over `gslm_sheets::SheetsClient`.
 
-use gslm_config::CredentialsSource;
+use gslm_cli::sheets_credentials;
 use gslm_sheets::{Credentials, SheetsError};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -66,11 +66,7 @@ fn credentials_from(opts: Option<CredentialsOptions>) -> Result<Credentials> {
 fn credentials_from_target(target: &crate::config::ConfigTargetForClient) -> Result<Credentials> {
     let source = crate::config::credentials_for_handle(&target.credential_handle)
         .ok_or_else(|| credentials_error("config Target 的 credentialHandle 無效或已過期"))?;
-    match source {
-        CredentialsSource::File(path) => Ok(Credentials::ServiceAccountFile(path)),
-        CredentialsSource::Json { value, .. } => Ok(Credentials::ServiceAccountJson(value)),
-        CredentialsSource::ApplicationDefault => Ok(Credentials::ApplicationDefault),
-    }
+    Ok(sheets_credentials(&source))
 }
 
 async fn build_client(credentials: Credentials, base_url: Option<String>) -> Result<SheetsClient> {

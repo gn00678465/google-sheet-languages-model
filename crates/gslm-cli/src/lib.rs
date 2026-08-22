@@ -5,12 +5,14 @@
 
 mod args;
 mod catalog_fs;
+mod credentials;
 mod init;
 mod pull;
 mod push;
 mod report;
 
-pub use catalog_fs::{Shape, detect_shape, render_path};
+pub use catalog_fs::{Shape, WriteOutcome, detect_shape, render_path};
+pub use credentials::{CredentialDetails, credential_details, sheets_credentials};
 pub use pull::{FileSummary, PullOptions, PullSummary, pull};
 pub use push::{PushOptions, PushSummary, push};
 
@@ -360,11 +362,7 @@ where
 }
 
 fn client_key(target: &ResolvedTarget, override_options: &SheetsOverride) -> String {
-    let credentials = match &target.credentials {
-        CredentialsSource::File(path) => format!("file:{}", path.display()),
-        CredentialsSource::Json { env_name, .. } => format!("env:{env_name}"),
-        CredentialsSource::ApplicationDefault => "adc".into(),
-    };
+    let credentials = credential_details(&target.credentials).cache_key;
     format!(
         "{credentials}:{}:{:?}",
         target.sheet, override_options.base_url
@@ -377,11 +375,7 @@ pub(crate) async fn build_client(
 ) -> Result<SheetsClient, CliError> {
     let credentials = match &override_options.access_token {
         Some(token) => Credentials::AccessToken(token.clone()),
-        None => match credentials {
-            CredentialsSource::File(path) => Credentials::ServiceAccountFile(path.clone()),
-            CredentialsSource::Json { value, .. } => Credentials::ServiceAccountJson(value.clone()),
-            CredentialsSource::ApplicationDefault => Credentials::ApplicationDefault,
-        },
+        None => sheets_credentials(credentials),
     };
     let mut builder = SheetsClient::builder(credentials);
     if let Some(base_url) = &override_options.base_url {

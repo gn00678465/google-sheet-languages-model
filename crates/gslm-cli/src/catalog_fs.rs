@@ -77,6 +77,17 @@ pub enum WriteOutcome {
     Unchanged,
 }
 
+impl WriteOutcome {
+    /// Stable lowercase spelling returned by the JavaScript API.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::Updated => "updated",
+            Self::Unchanged => "unchanged",
+        }
+    }
+}
+
 pub(crate) fn write_catalog(
     path: &Path,
     catalog: &Catalog,
@@ -136,9 +147,21 @@ fn restrict_temporary_permissions(
 ) -> Result<(), CliError> {
     use std::os::unix::fs::PermissionsExt;
 
+    let permissions = match fs::metadata(destination) {
+        Ok(metadata) => metadata.permissions(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            fs::Permissions::from_mode(0o644)
+        }
+        Err(source) => {
+            return Err(CliError::Io {
+                path: destination.to_path_buf(),
+                source,
+            });
+        }
+    };
     temporary
         .as_file()
-        .set_permissions(fs::Permissions::from_mode(0o600))
+        .set_permissions(permissions)
         .map_err(|source| CliError::Io {
             path: destination.to_path_buf(),
             source,
@@ -182,5 +205,12 @@ mod tests {
             render_path(Path::new("locales/{locale}/{locale}.json"), "zh-TW"),
             PathBuf::from("locales/zh-TW/zh-TW.json")
         );
+    }
+
+    #[test]
+    fn write_outcomes_have_stable_api_spellings() {
+        assert_eq!(WriteOutcome::Created.as_str(), "created");
+        assert_eq!(WriteOutcome::Updated.as_str(), "updated");
+        assert_eq!(WriteOutcome::Unchanged.as_str(), "unchanged");
     }
 }

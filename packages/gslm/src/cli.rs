@@ -101,7 +101,8 @@ impl From<gslm_cli::PullSummary> for JsPullSummary {
                     keys: file.keys as u32,
                     outcome: file
                         .outcome
-                        .map(|outcome| format!("{outcome:?}").to_lowercase()),
+                        .map(gslm_cli::WriteOutcome::as_str)
+                        .map(str::to_owned),
                 })
                 .collect(),
             created: value.created as u32,

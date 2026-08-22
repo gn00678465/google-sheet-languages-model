@@ -252,20 +252,6 @@ async fn pull_writes_nested_catalogs_creates_directories_and_detects_unchanged()
         fs::read_to_string(project.path().join("locales/zh-TW.json")).unwrap(),
         "{\n  \"app\": {\n    \"title\": \"標題\"\n  }\n}\n"
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        assert_eq!(
-            fs::metadata(project.path().join("locales/en.json"))
-                .unwrap()
-                .permissions()
-                .mode()
-                & 0o777,
-            0o600
-        );
-    }
-
     let (code, _, stderr) = execute(project.path(), &server, &["pull", "--verbose"]);
     assert_eq!(code, 0, "{stderr}");
     assert!(stderr.contains("詳細：讀取 Sheet sheet-id 的 Tab i18n"));
@@ -274,6 +260,44 @@ async fn pull_writes_nested_catalogs_creates_directories_and_detects_unchanged()
     let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
     assert_eq!(code, 0, "{stderr}");
     assert!(stderr.contains("未變動 2"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn pull_preserves_existing_catalog_permissions_and_uses_regular_permissions_for_new_files() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([
+            ["key", "en", "zh-TW"],
+            ["app.title", "Title", "標題"]
+        ])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+    let locales = project.path().join("locales");
+    fs::create_dir(&locales).unwrap();
+    let existing = locales.join("en.json");
+    fs::write(&existing, "{\"old\":\"value\"}\n").unwrap();
+    fs::set_permissions(&existing, fs::Permissions::from_mode(0o644)).unwrap();
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        fs::metadata(existing).unwrap().permissions().mode() & 0o777,
+        0o644
+    );
+    assert_eq!(
+        fs::metadata(locales.join("zh-TW.json"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
 }
 
 #[tokio::test]

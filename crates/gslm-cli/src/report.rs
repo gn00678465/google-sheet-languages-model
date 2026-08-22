@@ -1,5 +1,5 @@
-use crate::{ColorChoice, PullSummary, PushSummary};
-use gslm_config::{CredentialsSource, ResolvedTarget};
+use crate::{ColorChoice, PullSummary, PushSummary, credential_details};
+use gslm_config::ResolvedTarget;
 use std::io::Write;
 
 pub(crate) struct Reporter<'a> {
@@ -47,11 +47,7 @@ impl<'a> Reporter<'a> {
         if self.quiet {
             return;
         }
-        let credentials = match &target.credentials {
-            CredentialsSource::File(_) => "檔案",
-            CredentialsSource::Json { .. } => "環境變數 JSON",
-            CredentialsSource::ApplicationDefault => "Application Default Credentials",
-        };
+        let credentials = credential_details(&target.credentials).label;
         let _ = writeln!(
             self.stderr,
             "目標 {}：Sheet={}、Tab={}、語言={}、路徑={}、格式={:?}、憑證={credentials}",

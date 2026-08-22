@@ -139,22 +139,11 @@ pub struct JsResolvedConfig {
 
 impl From<CredentialsSource> for ConfigCredentials {
     fn from(value: CredentialsSource) -> Self {
-        match value {
-            CredentialsSource::File(path) => Self {
-                kind: "file".into(),
-                path: Some(path.to_string_lossy().into_owned()),
-                env: None,
-            },
-            CredentialsSource::Json { env_name, .. } => Self {
-                kind: "json".into(),
-                path: None,
-                env: Some(env_name),
-            },
-            CredentialsSource::ApplicationDefault => Self {
-                kind: "adc".into(),
-                path: None,
-                env: None,
-            },
+        let details = gslm_cli::credential_details(&value);
+        Self {
+            kind: details.kind.into(),
+            path: details.path.map(|path| path.to_string_lossy().into_owned()),
+            env: details.env_name,
         }
     }
 }

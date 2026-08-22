@@ -45,7 +45,7 @@ pub(crate) async fn pull_with_client(
     let table = client.read_tab(&target.sheet, &target.tab).await?;
     let model = gslm_core::Model::from_table(&table, target.locales.clone())?;
 
-    if model.ordered_keys().is_empty() && !options.force {
+    if model.catalogs().values().all(gslm_core::Catalog::is_empty) && !options.force {
         let mut local_keys = 0;
         for locale in &target.locales {
             let path = render_path(&target.path, locale);
