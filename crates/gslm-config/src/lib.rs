@@ -1019,14 +1019,18 @@ fn normalize_path(path: &Path) -> PathBuf {
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct RawConfig {
+    #[schemars(range(min = 1, max = 1))]
     version: u32,
     #[serde(rename = "$schema")]
     schema: Option<String>,
     sheet: Option<String>,
     tab: Option<String>,
+    #[schemars(length(min = 1))]
     locales: Option<Vec<String>>,
+    #[schemars(pattern(r".*\{locale\}.*"))]
     path: Option<String>,
     format: Option<RawFormat>,
+    #[schemars(length(min = 1))]
     key_separator: Option<String>,
     credentials: Option<RawCredentials>,
     targets: Option<Vec<RawTarget>>,
@@ -1035,12 +1039,16 @@ struct RawConfig {
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct RawTarget {
+    #[schemars(required)]
     name: Option<String>,
     sheet: Option<String>,
     tab: Option<String>,
+    #[schemars(length(min = 1))]
     locales: Option<Vec<String>>,
+    #[schemars(pattern(r".*\{locale\}.*"))]
     path: Option<String>,
     format: Option<RawFormat>,
+    #[schemars(length(min = 1))]
     key_separator: Option<String>,
     credentials: Option<RawCredentials>,
 }

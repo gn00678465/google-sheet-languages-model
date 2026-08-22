@@ -12,12 +12,17 @@ export {
   type SheetsClientOptions,
 } from './binding'
 
+/**
+ * Safe credentials metadata. `kind` determines which optional field exists;
+ * credential JSON is never returned to JavaScript.
+ */
 export interface ConfigCredentials {
   kind: 'file' | 'json' | 'adc'
   path?: string
   env?: string
 }
 
+/** A fully resolved Target with an absolute local Catalog path template. */
 export interface ResolvedTarget {
   name: string
   sheet: string
@@ -29,12 +34,17 @@ export interface ResolvedTarget {
   credentials: ConfigCredentials
 }
 
+/** Result of `loadConfig`, including any discovery warnings. */
 export interface ResolvedConfig {
   configPath?: string
   targets: ResolvedTarget[]
   warnings: string[]
 }
 
+/**
+ * Explicit values that take precedence over `GSLM_*` and the config file.
+ * `credentials` and `credentialsJson` are mutually exclusive.
+ */
 export interface ConfigOverrides {
   sheet?: string
   tab?: string
@@ -46,6 +56,7 @@ export interface ConfigOverrides {
   credentialsJson?: string
 }
 
+/** Options for config discovery, loading, and Target selection. */
 export interface LoadConfigOptions {
   cwd?: string
   configPath?: string
@@ -55,6 +66,7 @@ export interface LoadConfigOptions {
   loadDotenv?: boolean
 }
 
+/** Error shape thrown by `loadConfig`; `code` is stable for programmatic use. */
 export interface ConfigError extends Error {
   code:
     | 'CONFIG_NOT_FOUND'
@@ -70,6 +82,7 @@ export declare function loadConfig(options?: LoadConfigOptions | undefined | nul
 /** JSON Schema draft 2020-12 generated from the Rust config types. */
 export declare function configSchema(): Record<string, unknown>
 
+/** TOML preview and non-fatal migration warnings from a legacy config object. */
 export interface LegacyMigrationResult {
   toml: string
   warnings: string[]

@@ -6,7 +6,8 @@
     "version": {
       "type": "integer",
       "format": "uint32",
-      "minimum": 0
+      "minimum": 1,
+      "maximum": 1
     },
     "$schema": {
       "type": [
@@ -33,13 +34,15 @@
       ],
       "items": {
         "type": "string"
-      }
+      },
+      "minItems": 1
     },
     "path": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "pattern": ".*\\{locale\\}.*"
     },
     "format": {
       "anyOf": [
@@ -55,7 +58,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "minLength": 1
     },
     "credentials": {
       "anyOf": [
@@ -127,10 +131,7 @@
       "type": "object",
       "properties": {
         "name": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "sheet": {
           "type": [
@@ -151,13 +152,15 @@
           ],
           "items": {
             "type": "string"
-          }
+          },
+          "minItems": 1
         },
         "path": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "pattern": ".*\\{locale\\}.*"
         },
         "format": {
           "anyOf": [
@@ -173,7 +176,8 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "minLength": 1
         },
         "credentials": {
           "anyOf": [
@@ -186,7 +190,10 @@
           ]
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
     }
   },
   "$id": "https://gn00678465.github.io/google-sheet-languages-model/schema/v1.json"

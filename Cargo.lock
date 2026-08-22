@@ -512,6 +512,7 @@ dependencies = [
 name = "gslm-napi"
 version = "0.0.0"
 dependencies = [
+ "dotenvy",
  "gslm-config",
  "gslm-core",
  "gslm-sheets",

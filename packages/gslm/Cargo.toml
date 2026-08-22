@@ -18,6 +18,7 @@ serde_json = { workspace = true }
 indexmap = { workspace = true }
 napi = { workspace = true }
 napi-derive = { workspace = true }
+dotenvy = { workspace = true }
 
 [build-dependencies]
 napi-build = { workspace = true }

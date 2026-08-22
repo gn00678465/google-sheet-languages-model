@@ -87,6 +87,28 @@ fn discovers_jsonc_in_a_monorepo_and_loads_dotenv_without_overriding_injected_en
 }
 
 #[test]
+fn accepts_comments_and_trailing_commas_in_json_too() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.json"),
+        r#"{
+          // `.json` intentionally shares JSONC's relaxed parsing.
+          "version": 1,
+          "sheet": "json-sheet",
+          "tab": "Main",
+          "locales": ["en",],
+          "path": "translations/{locale}.json",
+        }"#,
+    )
+    .unwrap();
+
+    let config = load(options(project.path())).unwrap();
+
+    assert_eq!(config.config_path, Some(project.path().join("gslm.json")));
+    assert_eq!(config.targets[0].sheet, "json-sheet");
+}
+
+#[test]
 fn chooses_toml_before_other_formats_and_stops_at_git_boundary() {
     let outer = tempdir().unwrap();
     fs::write(
@@ -261,5 +283,26 @@ fn generated_schema_matches_the_checked_in_v1_contract() {
         "locales": ["en"],
         "path": "{locale}.json",
         "credentials": { "private_key": "do-not-commit" }
+    })));
+    assert!(!validator.is_valid(&json!({
+        "version": 2,
+        "sheet": "sheet-id",
+        "tab": "Main",
+        "locales": ["en"],
+        "path": "{locale}.json"
+    })));
+    assert!(!validator.is_valid(&json!({
+        "version": 1,
+        "sheet": "sheet-id",
+        "tab": "Main",
+        "locales": [],
+        "path": "{locale}.json"
+    })));
+    assert!(!validator.is_valid(&json!({
+        "version": 1,
+        "sheet": "sheet-id",
+        "tab": "Main",
+        "locales": ["en"],
+        "path": "translations.json"
     })));
 }

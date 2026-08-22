@@ -7,10 +7,27 @@ use gslm_core::Format;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn to_js(error: ConfigError) -> Error {
     Error::new(Status::InvalidArg, format!("[{}] {}", error.code(), error))
+}
+
+/// Keep the process environment in sync with `loadConfig` so a later
+/// `SheetsClient.fromConfig(target)` can re-read JSON credentials without a
+/// secret ever crossing JavaScript. `dotenvy::from_path` preserves existing
+/// process values; `gslm-config` separately keeps injected test maps isolated.
+fn load_dotenv_for_sheets(cwd: &Path) -> Result<()> {
+    let path = cwd.join(".env");
+    if !path.is_file() {
+        return Ok(());
+    }
+    dotenvy::from_path(&path).map_err(|error| {
+        Error::new(
+            Status::InvalidArg,
+            format!("[CONFIG_PARSE] 無法載入 {}: {error}", path.display()),
+        )
+    })
 }
 
 /// Options accepted by [`load_config`]. `env` is mainly useful for tests and
@@ -173,6 +190,9 @@ pub fn load_config(options: Option<LoadConfigOptions>) -> Result<JsResolvedConfi
         .unwrap_or_default();
     native.targets = options.targets;
     native.load_dotenv = options.load_dotenv.unwrap_or(true);
+    if native.load_dotenv {
+        load_dotenv_for_sheets(&native.cwd)?;
+    }
     gslm_config::load(native).map(Into::into).map_err(to_js)
 }
 
