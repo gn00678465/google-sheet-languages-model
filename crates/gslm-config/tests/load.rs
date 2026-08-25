@@ -829,15 +829,39 @@ name = "mobile"
 "#,
     )
     .unwrap();
-    let mut opts = options(project.path());
-    opts.overrides = Overrides {
-        key_separator: Some("/".into()),
-        ..Overrides::default()
-    };
-    assert!(matches!(
-        load(opts),
-        Err(ConfigError::AmbiguousOverride { .. })
-    ));
+    for overrides in [
+        Overrides {
+            sheet: Some("override".into()),
+            ..Overrides::default()
+        },
+        Overrides {
+            tab: Some("Override".into()),
+            ..Overrides::default()
+        },
+        Overrides {
+            locales: Some(vec!["ja".into()]),
+            ..Overrides::default()
+        },
+        Overrides {
+            path: Some("override/{locale}.json".into()),
+            ..Overrides::default()
+        },
+        Overrides {
+            format: Some(gslm_core::Format::Flat),
+            ..Overrides::default()
+        },
+        Overrides {
+            key_separator: Some("/".into()),
+            ..Overrides::default()
+        },
+    ] {
+        let mut opts = options(project.path());
+        opts.overrides = overrides;
+        assert!(matches!(
+            load(opts),
+            Err(ConfigError::AmbiguousOverride { .. })
+        ));
+    }
 
     fs::remove_file(project.path().join("gslm.toml")).unwrap();
     fs::write(
