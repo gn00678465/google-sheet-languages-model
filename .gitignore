@@ -11,3 +11,7 @@ tmp
 # Rust
 target/
 artifacts/
+
+# Coverage and mutation-testing artifacts (cargo-llvm-cov, cargo-mutants)
+*.profraw
+mutants.out/
