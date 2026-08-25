@@ -173,6 +173,15 @@ fn rejects_legacy_and_invalid_config_with_stable_codes() {
 
     fs::write(
         project.path().join("gslm.toml"),
+        "version = 1\nsheet = \"id\"\ntab = \"Main\"\nlanguages = [\"en\"]\npath = \"{locale}.json\"\n",
+    )
+    .unwrap();
+    let err = load(options(project.path())).unwrap_err();
+    assert_eq!(err.code(), "CONFIG_INVALID");
+    assert!(err.to_string().contains("已改為 `locales`"));
+
+    fs::write(
+        project.path().join("gslm.toml"),
         "version = 1\nsheet = \"id\"\ntab = \"Main\"\nlocales = [\"en\"]\npath = \"{locale}.json\"\n[credentials]\ntype = \"service_account\"\n",
     )
     .unwrap();
