@@ -1,5 +1,7 @@
 // Hand-written: re-exports the generated binding typings and refines the
 // parts that index.js wraps.
+import type { CredentialsOptions, Model, SheetsClientOptions } from './binding'
+
 export {
   flatten,
   unflatten,
