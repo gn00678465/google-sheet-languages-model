@@ -244,6 +244,7 @@ async fn pull_writes_nested_catalogs_creates_directories_and_detects_unchanged()
 
     let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
     assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("新增 2、變更 0、未變動 0"));
     assert_eq!(
         fs::read_to_string(project.path().join("locales/en.json")).unwrap(),
         "{\n  \"app\": {\n    \"title\": \"Title\"\n  },\n  \"missing\": \"Present\"\n}\n"
@@ -286,6 +287,7 @@ async fn pull_preserves_existing_catalog_permissions_and_uses_regular_permission
     let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
 
     assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("新增 1、變更 1、未變動 0"));
     assert_eq!(
         fs::metadata(existing).unwrap().permissions().mode() & 0o777,
         0o644
@@ -347,6 +349,78 @@ async fn pull_rejects_empty_sheet_before_overwriting_local_catalog_unless_forced
     let (code, _, stderr) = execute(project.path(), &server, &["pull", "--force"]);
     assert_eq!(code, 0, "{stderr}");
     assert_eq!(fs::read_to_string(local).unwrap(), "{}\n");
+}
+
+#[tokio::test]
+async fn pull_allows_an_empty_sheet_when_no_local_catalog_has_keys() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([["key", "en", "zh-TW"]])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        fs::read_to_string(project.path().join("locales/en.json")).unwrap(),
+        "{}\n"
+    );
+    assert_eq!(
+        fs::read_to_string(project.path().join("locales/zh-TW.json")).unwrap(),
+        "{}\n"
+    );
+}
+
+#[tokio::test]
+async fn pull_counts_keys_across_every_existing_catalog_before_an_empty_sheet() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([["key", "en", "zh-TW"]])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+    fs::create_dir(project.path().join("locales")).unwrap();
+    fs::write(project.path().join("locales/en.json"), r#"{"first":"one"}"#).unwrap();
+    fs::write(
+        project.path().join("locales/zh-TW.json"),
+        r#"{"second":"two"}"#,
+    )
+    .unwrap();
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[PULL_EMPTY_SHEET]"));
+    assert!(stderr.contains("本地有 2 個 key"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn pull_reports_a_broken_catalog_path_instead_of_treating_it_as_local_data() {
+    use std::os::unix::fs::symlink;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([["key", "en", "zh-TW"]])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+    let locales = project.path().join("locales");
+    fs::create_dir(&locales).unwrap();
+    let broken = locales.join("en.json");
+    symlink(&broken, &broken).unwrap();
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[CATALOG]"));
+    assert!(stderr.contains(&broken.display().to_string()));
+    assert!(!stderr.contains("[PULL_EMPTY_SHEET]"));
 }
 
 #[tokio::test]
@@ -489,7 +563,7 @@ async fn multiple_targets_can_be_filtered_and_ambiguous_overrides_are_rejected()
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .respond_with(sheet(json!([["key", "en", "zh-TW"], ["a", "A", "甲"]])))
-        .expect(1)
+        .expect(2)
         .mount(&server)
         .await;
     let project = multi_project();
@@ -497,12 +571,54 @@ async fn multiple_targets_can_be_filtered_and_ambiguous_overrides_are_rejected()
     assert_eq!(code, 0, "{stderr}");
     assert!(stderr.contains("目標 two"));
     assert!(!stderr.contains("目標 one"));
+    let (code, _, stderr) = execute(
+        project.path(),
+        &server,
+        &["pull", "--target", "two", "--sheet", "override"],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("目標 two：Sheet=override"));
     let (code, _, stderr) = execute(project.path(), &server, &["pull", "--sheet", "override"]);
     assert_eq!(code, 1);
     assert!(stderr.contains("[CONFIG_INVALID]"));
     let (code, _, stderr) = execute(project.path(), &server, &["pull", "--target", ""]);
     assert_eq!(code, 1);
     assert!(stderr.contains("找不到 Target"));
+}
+
+#[tokio::test]
+async fn quiet_pull_suppresses_target_summary_and_file_progress() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([["key", "en", "zh-TW"], ["a", "A", "甲"]])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+
+    let (code, stdout, stderr) = execute(project.path(), &server, &["--quiet", "pull"]);
+
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty(), "{stderr}");
+}
+
+#[tokio::test]
+async fn no_dotenv_keeps_config_values_for_sync_commands() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([["key", "en", "zh-TW"], ["a", "A", "甲"]])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+    fs::write(project.path().join(".env"), "GSLM_SHEET=from-dotenv\n").unwrap();
+
+    let (code, _, stderr) = execute(project.path(), &server, &["--no-dotenv", "pull"]);
+
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("Sheet=sheet-id"));
+    assert!(!stderr.contains("Sheet=from-dotenv"));
 }
 
 #[tokio::test]

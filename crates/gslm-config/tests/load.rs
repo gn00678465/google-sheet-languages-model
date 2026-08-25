@@ -506,7 +506,12 @@ fn explicit_paths_and_parse_failures_keep_their_actionable_details() {
     let error = load(opts).unwrap_err();
     assert!(matches!(
         error,
-        ConfigError::Parse { ref path, line: Some(_), column: Some(_), .. } if path == &bad_toml
+        ConfigError::Parse {
+            ref path,
+            line: Some(2),
+            column: Some(8),
+            ..
+        } if path == &bad_toml
     ));
     assert!(error.to_string().contains("第 2 行"));
 
@@ -543,6 +548,19 @@ fn rejects_unsafe_credentials_and_unknown_fields_with_specific_guidance() {
             "舊欄位 `sheetTitle` 已改為 `tab`；請執行 `gslm migrate`",
         ),
         (
+            complete_config("directory = \"legacy\"\n"),
+            "舊欄位 `directory` 已改為 `path`；請執行 `gslm migrate`",
+        ),
+        (
+            complete_config("type = \"legacy\"\n"),
+            "舊欄位 `type` 已改為 `format`；請執行 `gslm migrate`",
+        ),
+        (
+            complete_config("sheetx = \"typo\"\n"),
+            "未知欄位 sheetx；是否要用 `sheet`？",
+        ),
+        (complete_config("ssss = \"unrelated\"\n"), "未知欄位 ssss"),
+        (
             complete_config("credentials = \"inline\"\n"),
             "credentials：必須是 { file = \"...\" } 或 { env = \"...\" }",
         ),
@@ -568,6 +586,12 @@ fn rejects_unsafe_credentials_and_unknown_fields_with_specific_guidance() {
             "case {index}: {error} does not contain {expected}"
         );
     }
+
+    let no_suggestion = project.path().join("no-suggestion.toml");
+    fs::write(&no_suggestion, complete_config("ssss = \"unrelated\"\n")).unwrap();
+    let mut opts = options(project.path());
+    opts.config_path = Some(no_suggestion);
+    assert_eq!(load(opts).unwrap_err().to_string(), "未知欄位 ssss");
 }
 
 #[test]
@@ -662,6 +686,43 @@ fn applies_all_environment_and_cli_overrides_in_documented_precedence() {
             value: "{\"type\":\"service_account\"}".into(),
         }
     );
+}
+
+#[test]
+fn keeps_nest_format_and_a_non_empty_injected_dotenv_value() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        complete_config("format = \"nest\"\n[credentials]\nenv = \"SERVICE_ACCOUNT\"\n"),
+    )
+    .unwrap();
+    fs::write(project.path().join(".env"), "SERVICE_ACCOUNT=from-dotenv\n").unwrap();
+    let mut opts = options(project.path());
+    opts.env
+        .insert("SERVICE_ACCOUNT".into(), "from-injected-env".into());
+
+    let config = load(opts).unwrap();
+
+    assert_eq!(config.targets[0].format, gslm_core::Format::Nest);
+    assert_eq!(
+        config.targets[0].credentials,
+        CredentialsSource::Json {
+            env_name: "SERVICE_ACCOUNT".into(),
+            value: "from-injected-env".into(),
+        }
+    );
+}
+
+#[test]
+fn accepts_nest_from_the_environment_format_override() {
+    let project = tempdir().unwrap();
+    fs::write(project.path().join("gslm.toml"), complete_config("")).unwrap();
+    let mut opts = options(project.path());
+    opts.env.insert("GSLM_FORMAT".into(), "nest".into());
+
+    let config = load(opts).unwrap();
+
+    assert_eq!(config.targets[0].format, gslm_core::Format::Nest);
 }
 
 #[test]

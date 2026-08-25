@@ -287,6 +287,21 @@ mod tests {
     }
 
     #[test]
+    fn catalogs_exposes_every_locale_in_model_order() {
+        let model = Model::new(["en", "zh-TW"]);
+
+        assert_eq!(model.catalogs().len(), 2);
+        assert_eq!(
+            model
+                .catalogs()
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["en", "zh-TW"]
+        );
+    }
+
+    #[test]
     fn from_table_matches_columns_by_header_not_position() {
         let rows = vec![
             row(&["key", "zh-TW", "notes", "en"]),
@@ -398,6 +413,25 @@ mod tests {
             ConversionError::DuplicateKey {
                 key: "a".into(),
                 row: 4
+            }
+        );
+    }
+
+    #[test]
+    fn from_table_duplicate_key_reports_its_actual_later_row() {
+        let rows = vec![
+            row(&["key", "en"]),
+            row(&["first", "one"]),
+            row(&["second", "two"]),
+            row(&["third", "three"]),
+            row(&["second", "duplicate"]),
+        ];
+
+        assert_eq!(
+            Model::from_table(&rows, ["en"]).unwrap_err(),
+            ConversionError::DuplicateKey {
+                key: "second".into(),
+                row: 5,
             }
         );
     }
