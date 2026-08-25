@@ -425,4 +425,145 @@ mod tests {
             BTreeMap::from([("VALID".into(), "value".into())])
         );
     }
+
+    #[test]
+    fn sheets_failures_have_actionable_cli_messages_and_stable_codes() {
+        let cases = vec![
+            (
+                SheetsError::Credentials("bad key".into()),
+                "CREDENTIALS",
+                "Google Sheets 憑證無效：bad key",
+            ),
+            (
+                SheetsError::Auth("expired".into()),
+                "AUTH",
+                "無法取得 Google Sheets 存取權杖",
+            ),
+            (
+                SheetsError::PermissionDenied {
+                    sheet_id: "sheet".into(),
+                    service_account_email: None,
+                },
+                "PERMISSION_DENIED",
+                "沒有 Sheet sheet 的存取權限；請將服務帳號設為編輯者",
+            ),
+            (
+                SheetsError::SheetNotFound {
+                    sheet_id: "sheet".into(),
+                },
+                "SHEET_NOT_FOUND",
+                "找不到 Sheet sheet",
+            ),
+            (
+                SheetsError::TabNotFound {
+                    sheet_id: "sheet".into(),
+                    tab: "Tab".into(),
+                },
+                "TAB_NOT_FOUND",
+                "找不到 Sheet sheet 中的 Tab Tab",
+            ),
+            (
+                SheetsError::RateLimited,
+                "RATE_LIMITED",
+                "Google Sheets API 已達速率限制，請稍後重試",
+            ),
+            (
+                SheetsError::ServerError { status: 503 },
+                "SERVER_ERROR",
+                "Google Sheets API 伺服器錯誤（HTTP 503），請稍後重試",
+            ),
+            (
+                SheetsError::Http {
+                    status: 418,
+                    message: "teapot".into(),
+                },
+                "HTTP",
+                "Google Sheets API 回應 HTTP 418",
+            ),
+            (
+                SheetsError::Network("offline".into()),
+                "NETWORK",
+                "無法連線至 Google Sheets API",
+            ),
+            (
+                SheetsError::InvalidResponse("not JSON".into()),
+                "INVALID_RESPONSE",
+                "Google Sheets API 回應格式無效",
+            ),
+            (
+                SheetsError::WriteAfterClearFailed {
+                    source: Box::new(SheetsError::Network("offline".into())),
+                },
+                "WRITE_AFTER_CLEAR_FAILED",
+                "Tab 已被清空但寫入失敗，請重試 push",
+            ),
+        ];
+
+        for (source, code, message) in cases {
+            let error = CliError::from(source);
+            assert_eq!(error.code(), code);
+            assert_eq!(error.to_string(), message);
+        }
+    }
+
+    #[test]
+    fn conversion_failures_have_actionable_cli_messages_and_a_shared_code() {
+        use gslm_core::ConversionError;
+
+        let cases = vec![
+            (
+                ConversionError::NotAnObject("array"),
+                "Catalog 最外層必須是物件，目前為 array",
+            ),
+            (
+                ConversionError::NumericKeySegment("0".into()),
+                "key 片段不可為數字：0",
+            ),
+            (ConversionError::EmptySeparator, "key 分隔符不可為空字串"),
+            (
+                ConversionError::ArrayNotSupported("items".into()),
+                "Catalog 不支援陣列（key：items）",
+            ),
+            (
+                ConversionError::NonStringTranslation {
+                    key: "count".into(),
+                    kind: "number",
+                },
+                "翻譯值必須是字串，目前為 number（key：count）",
+            ),
+            (
+                ConversionError::KeyConflict { key: "a".into() },
+                "key a 與巢狀 key 衝突",
+            ),
+            (
+                ConversionError::DuplicateFlatKey { key: "a.b".into() },
+                "巢狀與扁平寫法產生重複 key：a.b",
+            ),
+            (ConversionError::EmptySheet, "Sheet 為空，缺少標題列"),
+            (
+                ConversionError::LocaleNotInHeader {
+                    locale: "fr".into(),
+                    available: vec!["en".into(), "zh-TW".into()],
+                },
+                "Sheet 標題列沒有 Locale fr（可用：en, zh-TW）",
+            ),
+            (
+                ConversionError::DuplicateKey {
+                    key: "title".into(),
+                    row: 3,
+                },
+                "key title 在第 3 列重複",
+            ),
+            (
+                ConversionError::UnknownLocale("fr".into()),
+                "Locale fr 不屬於此 Model",
+            ),
+        ];
+
+        for (source, message) in cases {
+            let error = CliError::from(source);
+            assert_eq!(error.code(), "CONVERSION");
+            assert_eq!(error.to_string(), format!("轉換資料失敗：{message}"));
+        }
+    }
 }

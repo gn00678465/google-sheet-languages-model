@@ -214,3 +214,51 @@ pub async fn push(
     .map(Into::into)
     .map_err(to_js)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn summaries_preserve_cli_results_without_exposing_cli_types() {
+        let pull = JsPullSummary::from(gslm_cli::PullSummary {
+            target: "web".into(),
+            files: vec![gslm_cli::FileSummary {
+                locale: "en".into(),
+                path: PathBuf::from("/project/en.json"),
+                keys: 2,
+                outcome: Some(gslm_cli::WriteOutcome::Updated),
+            }],
+            created: 1,
+            updated: 2,
+            unchanged: 3,
+        });
+        assert_eq!(pull.target, "web");
+        assert_eq!(pull.files[0].path, "/project/en.json");
+        assert_eq!(pull.files[0].outcome.as_deref(), Some("updated"));
+        assert_eq!((pull.created, pull.updated, pull.unchanged), (1, 2, 3));
+
+        let push = JsPushSummary::from(gslm_cli::PushSummary {
+            target: "web".into(),
+            rows: 3,
+            columns: 2,
+            locale_keys: vec![("en".into(), 2), ("zh-TW".into(), 1)],
+            orphan_keys: vec!["only-translated".into()],
+            warnings: vec!["format drift".into()],
+        });
+        assert_eq!((push.rows, push.columns), (3, 2));
+        assert_eq!(push.locale_keys[1].locale, "zh-TW");
+        assert_eq!(push.locale_keys[1].keys, 1);
+        assert_eq!(push.orphan_keys, ["only-translated"]);
+        assert_eq!(push.warnings, ["format drift"]);
+    }
+
+    #[test]
+    fn cli_adapter_uses_explicit_color_defaults() {
+        assert_eq!(color(Some("always".into())), Some(ColorChoice::Always));
+        assert_eq!(color(Some("never".into())), Some(ColorChoice::Never));
+        assert_eq!(color(Some("invalid".into())), Some(ColorChoice::Auto));
+        assert_eq!(color(None), Some(ColorChoice::Auto));
+    }
+}

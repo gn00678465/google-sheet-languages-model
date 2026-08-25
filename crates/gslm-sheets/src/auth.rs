@@ -199,6 +199,8 @@ mod tests {
             .unwrap();
         assert_eq!(p.token().await.unwrap(), "tok");
         assert_eq!(p.service_account_email(), None);
+        assert!(!format!("{p:?}").contains("tok"));
+        assert_eq!(format!("{p:?}"), "StaticToken(<redacted>)");
     }
 
     #[tokio::test]
@@ -237,17 +239,23 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_non_service_account_json() {
-        for raw in [
-            r#"{"type":"authorized_user"}"#,
-            "not json",
-            r#"{"type":"service_account"}"#,
+        for (raw, expected) in [
+            (
+                r#"{"type":"authorized_user"}"#,
+                "expected \"type\": \"service_account\"",
+            ),
+            ("not json", "is not valid JSON"),
+            (r#"{"type":"service_account"}"#, "missing client_email"),
+            (
+                r#"{"type":"service_account","client_email":"bot@example.com"}"#,
+                "missing private_key",
+            ),
         ] {
-            assert!(matches!(
-                provider_for(Credentials::ServiceAccountJson(raw.into()))
-                    .await
-                    .unwrap_err(),
-                SheetsError::Credentials(_)
-            ));
+            let error = provider_for(Credentials::ServiceAccountJson(raw.into()))
+                .await
+                .unwrap_err();
+            assert_eq!(error.code(), "CREDENTIALS");
+            assert!(error.to_string().contains(expected), "{error}");
         }
     }
 

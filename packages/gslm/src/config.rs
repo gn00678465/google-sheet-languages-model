@@ -276,3 +276,44 @@ pub fn load_config(options: Option<LoadConfigOptions>) -> Result<JsResolvedConfi
 pub fn config_schema() -> serde_json::Value {
     gslm_config::schema()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_override_format_is_converted_or_rejected_with_a_stable_error() {
+        let overrides: Overrides = ConfigOverrides {
+            format: Some("flat".into()),
+            sheet: Some("sheet".into()),
+            ..ConfigOverrides::default()
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(overrides.format, Some(Format::Flat));
+        assert_eq!(overrides.sheet.as_deref(), Some("sheet"));
+
+        let error = Overrides::try_from(ConfigOverrides {
+            format: Some("yaml".into()),
+            ..ConfigOverrides::default()
+        })
+        .unwrap_err();
+        assert_eq!(error.code(), "CONFIG_INVALID");
+        assert!(error.to_string().contains("overrides.format"));
+        assert!(error.to_string().contains("nest` 或 `flat"));
+    }
+
+    #[test]
+    fn safe_credential_metadata_excludes_the_secret_value() {
+        let source = CredentialsSource::Json {
+            env_name: "SERVICE_ACCOUNT_JSON".into(),
+            value: "never-serialize-this-secret".into(),
+        };
+        let metadata = ConfigCredentials::from(source);
+
+        assert_eq!(metadata.kind, "json");
+        assert_eq!(metadata.env.as_deref(), Some("SERVICE_ACCOUNT_JSON"));
+        assert_eq!(metadata.path, None);
+        assert!(!format!("{metadata:?}").contains("never-serialize-this-secret"));
+    }
+}

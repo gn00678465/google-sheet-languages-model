@@ -459,3 +459,353 @@ fn generated_schema_matches_the_checked_in_v1_contract() {
         "path": "translations.json"
     })));
 }
+
+fn complete_config(extra: &str) -> String {
+    format!(
+        "version = 1\nsheet = \"file-sheet\"\ntab = \"File\"\nlocales = [\"en\", \"zh-TW\"]\npath = \"translations/{{locale}}.json\"\n{extra}"
+    )
+}
+
+#[test]
+fn explicit_paths_and_parse_failures_keep_their_actionable_details() {
+    let project = tempdir().unwrap();
+    let unsupported = project.path().join("gslm.yaml");
+    fs::write(&unsupported, "version: 1\n").unwrap();
+    let mut opts = options(project.path());
+    opts.config_path = Some(unsupported.clone());
+    let error = load(opts).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_UNSUPPORTED");
+    assert!(
+        error
+            .to_string()
+            .contains(&unsupported.display().to_string())
+    );
+
+    let missing = project.path().join("missing.toml");
+    let mut opts = options(project.path());
+    opts.config_path = Some(missing.clone());
+    let error = load(opts).unwrap_err();
+    assert!(matches!(
+        error,
+        ConfigError::NotFound { ref start, ref searched } if start == project.path() && searched == &vec![missing]
+    ));
+
+    let bad_toml = project.path().join("bad.toml");
+    fs::write(&bad_toml, "version = 1\nsheet =\n").unwrap();
+    let mut opts = options(project.path());
+    opts.config_path = Some(bad_toml.clone());
+    let error = load(opts).unwrap_err();
+    assert!(matches!(
+        error,
+        ConfigError::Parse { ref path, line: Some(_), column: Some(_), .. } if path == &bad_toml
+    ));
+    assert!(error.to_string().contains("第 2 行"));
+
+    let bad_json = project.path().join("bad.jsonc");
+    fs::write(&bad_json, "{ version: 1,").unwrap();
+    let mut opts = options(project.path());
+    opts.config_path = Some(bad_json.clone());
+    let error = load(opts).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_PARSE");
+    assert!(error.to_string().contains(&bad_json.display().to_string()));
+
+    let wrong_type = project.path().join("wrong-type.toml");
+    fs::write(&wrong_type, "version = 1\nsheet = 42\n").unwrap();
+    let mut opts = options(project.path());
+    opts.config_path = Some(wrong_type.clone());
+    let error = load(opts).unwrap_err();
+    assert!(matches!(
+        error,
+        ConfigError::Invalid { ref path, ref field, .. }
+            if path.as_ref() == Some(&wrong_type) && field == "config"
+    ));
+}
+
+#[test]
+fn rejects_unsafe_credentials_and_unknown_fields_with_specific_guidance() {
+    let project = tempdir().unwrap();
+    let cases = [
+        (
+            complete_config("shte = \"typo\"\n"),
+            "未知欄位 shte；是否要用 `sheet`？",
+        ),
+        (
+            complete_config("sheetTitle = \"legacy\"\n"),
+            "舊欄位 `sheetTitle` 已改為 `tab`；請執行 `gslm migrate`",
+        ),
+        (
+            complete_config("credentials = \"inline\"\n"),
+            "credentials：必須是 { file = \"...\" } 或 { env = \"...\" }",
+        ),
+        (
+            complete_config("[credentials]\nprivate_key = \"secret\"\n"),
+            "credentials.private_key",
+        ),
+        (
+            complete_config("[credentials]\nfile = \"one.json\"\nenv = \"SERVICE_ACCOUNT\"\n"),
+            "file 與 env 只能擇一",
+        ),
+    ];
+
+    for (index, (text, expected)) in cases.into_iter().enumerate() {
+        let path = project.path().join(format!("case-{index}.toml"));
+        fs::write(&path, text).unwrap();
+        let mut opts = options(project.path());
+        opts.config_path = Some(path);
+        let error = load(opts).unwrap_err();
+        assert_eq!(error.code(), "CONFIG_INVALID", "case {index}: {error}");
+        assert!(
+            error.to_string().contains(expected),
+            "case {index}: {error} does not contain {expected}"
+        );
+    }
+}
+
+#[test]
+fn validates_target_names_required_values_and_path_templates() {
+    let project = tempdir().unwrap();
+    let cases = vec![
+        (
+            "version = 1\ntargets = []\n".to_string(),
+            "targets：不可為空陣列",
+        ),
+        (
+            "version = 1\n[[targets]]\nsheet = \"id\"\ntab = \"Main\"\nlocales = [\"en\"]\npath = \"{locale}.json\"\n".to_string(),
+            "targets.name：每個 Target 都必須有唯一 name",
+        ),
+        (
+            "version = 1\n[[targets]]\nname = \"web\"\nsheet = \"id\"\ntab = \"Main\"\nlocales = [\"en\"]\npath = \"{locale}.json\"\n[[targets]]\nname = \"web\"\nsheet = \"other\"\ntab = \"Other\"\nlocales = [\"en\"]\npath = \"{locale}.json\"\n".to_string(),
+            "Target name `web` 重複",
+        ),
+        (
+            complete_config("").replace("locales = [\"en\", \"zh-TW\"]", "locales = []"),
+            "targets.default.locales：不可為空陣列",
+        ),
+        (
+            complete_config("").replace("translations/{locale}.json", "translations.json"),
+            "必須包含 {locale} 佔位符",
+        ),
+        (
+            complete_config("").replace("translations/{locale}.json", "translations/{language}.json"),
+            "不支援 {language}；目前只支援 {locale}",
+        ),
+        (
+            complete_config("key_separator = \"\"\n"),
+            "targets.default.key_separator：不可為空字串",
+        ),
+    ];
+
+    for (index, (text, expected)) in cases.into_iter().enumerate() {
+        let path = project.path().join(format!("target-{index}.toml"));
+        fs::write(&path, text).unwrap();
+        let mut opts = options(project.path());
+        opts.config_path = Some(path);
+        let error = load(opts).unwrap_err();
+        assert_eq!(error.code(), "CONFIG_INVALID", "case {index}: {error}");
+        assert!(
+            error.to_string().contains(expected),
+            "case {index}: {error}"
+        );
+    }
+}
+
+#[test]
+fn applies_all_environment_and_cli_overrides_in_documented_precedence() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        complete_config("format = \"nest\"\n"),
+    )
+    .unwrap();
+    let mut opts = options(project.path());
+    opts.env = BTreeMap::from([
+        ("GSLM_SHEET".into(), "env-sheet".into()),
+        ("GSLM_TAB".into(), "Env".into()),
+        ("GSLM_LOCALES".into(), "en, ja ".into()),
+        ("GSLM_PATH".into(), "env/{locale}.json".into()),
+        ("GSLM_FORMAT".into(), "flat".into()),
+        ("GSLM_KEY_SEPARATOR".into(), "/".into()),
+        ("GSLM_CREDENTIALS".into(), "env-service-account.json".into()),
+    ]);
+    opts.overrides = Overrides {
+        sheet: Some("cli-sheet".into()),
+        tab: Some("Cli".into()),
+        locales: Some(vec!["en".into(), "fr".into()]),
+        path: Some("cli/{locale}.json".into()),
+        format: Some(gslm_core::Format::Nest),
+        key_separator: Some(".".into()),
+        credentials_json: Some("{\"type\":\"service_account\"}".into()),
+        ..Overrides::default()
+    };
+
+    let config = load(opts).unwrap();
+    let target = &config.targets[0];
+    assert_eq!(target.sheet, "cli-sheet");
+    assert_eq!(target.tab, "Cli");
+    assert_eq!(target.locales, ["en", "fr"]);
+    assert_eq!(target.path, project.path().join("cli/{locale}.json"));
+    assert_eq!(target.format, gslm_core::Format::Nest);
+    assert_eq!(target.key_separator, ".");
+    assert_eq!(
+        target.credentials,
+        CredentialsSource::Json {
+            env_name: "GSLM_CREDENTIALS_JSON".into(),
+            value: "{\"type\":\"service_account\"}".into(),
+        }
+    );
+}
+
+#[test]
+fn rejects_conflicting_environment_credentials_and_names_missing_target() {
+    let project = tempdir().unwrap();
+    fs::write(project.path().join("gslm.toml"), complete_config("")).unwrap();
+    let mut opts = options(project.path());
+    opts.env = BTreeMap::from([
+        ("GSLM_CREDENTIALS".into(), "file.json".into()),
+        ("GSLM_CREDENTIALS_JSON".into(), "secret".into()),
+    ]);
+    let error = load(opts).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_INVALID");
+    assert!(
+        error
+            .to_string()
+            .contains("GSLM_CREDENTIALS 與 GSLM_CREDENTIALS_JSON 只能擇一")
+    );
+
+    let mut opts = options(project.path());
+    opts.targets = Some(vec!["missing".into()]);
+    let error = load(opts).unwrap_err();
+    assert!(matches!(
+        error,
+        ConfigError::UnknownTarget { ref name, ref available }
+            if name == "missing" && available == &vec!["default".to_string()]
+    ));
+    assert_eq!(error.code(), "CONFIG_INVALID");
+}
+
+#[test]
+fn resolves_file_credentials_and_reports_missing_environment_values() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        complete_config("[credentials]\nfile = \"credentials/../service-account.json\"\n"),
+    )
+    .unwrap();
+    let config = load(options(project.path())).unwrap();
+    assert_eq!(
+        config.targets[0].credentials,
+        CredentialsSource::File(project.path().join("service-account.json"))
+    );
+
+    fs::write(
+        project.path().join("gslm.toml"),
+        complete_config("[credentials]\nenv = \"MISSING_SERVICE_ACCOUNT\"\n"),
+    )
+    .unwrap();
+    let error = load(options(project.path())).unwrap_err();
+    assert!(
+        matches!(error, ConfigError::MissingEnv { ref name } if name == "MISSING_SERVICE_ACCOUNT")
+    );
+    assert_eq!(error.code(), "CONFIG_INVALID");
+    assert!(error.to_string().contains("MISSING_SERVICE_ACCOUNT"));
+}
+
+#[test]
+fn rejects_conflicting_cli_credentials_and_invalid_format_or_template_syntax() {
+    let project = tempdir().unwrap();
+    fs::write(project.path().join("gslm.toml"), complete_config("")).unwrap();
+    let mut opts = options(project.path());
+    opts.overrides = Overrides {
+        credentials: Some("service-account.json".into()),
+        credentials_json: Some("secret".into()),
+        ..Overrides::default()
+    };
+    let error = load(opts).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_INVALID");
+    assert!(
+        error
+            .to_string()
+            .contains("credentials 或 credentials_json 其中之一")
+    );
+
+    let mut opts = options(project.path());
+    opts.env.insert("GSLM_FORMAT".into(), "yaml".into());
+    let error = load(opts).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_INVALID");
+    assert!(
+        error
+            .to_string()
+            .contains("GSLM_FORMAT：只能是 `nest` 或 `flat`")
+    );
+
+    for (name, text, expected) in [
+        (
+            "unclosed-placeholder",
+            complete_config("").replace("translations/{locale}.json", "translations/{locale.json"),
+            "佔位符必須以 } 結束",
+        ),
+        (
+            "stray-closing-placeholder",
+            complete_config("").replace("translations/{locale}.json", "translations/locale}.json"),
+            "佔位符格式無效",
+        ),
+    ] {
+        let path = project.path().join(format!("{name}.toml"));
+        fs::write(&path, text).unwrap();
+        let mut opts = options(project.path());
+        opts.config_path = Some(path);
+        let error = load(opts).unwrap_err();
+        assert_eq!(error.code(), "CONFIG_INVALID", "{name}: {error}");
+        assert!(error.to_string().contains(expected), "{name}: {error}");
+    }
+
+    let invalid_format = project.path().join("invalid-format.toml");
+    fs::write(&invalid_format, complete_config("format = \"yaml\"\n")).unwrap();
+    let mut opts = options(project.path());
+    opts.config_path = Some(invalid_format.clone());
+    let error = load(opts).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_INVALID");
+    assert!(
+        error
+            .to_string()
+            .contains(&invalid_format.display().to_string())
+    );
+    assert!(error.to_string().contains("unknown variant `yaml`"));
+}
+
+#[test]
+fn validates_non_object_targets_and_preserves_error_display_variants() {
+    let project = tempdir().unwrap();
+    let non_object_target = project.path().join("targets.json");
+    fs::write(&non_object_target, r#"{"version":1,"targets":[false]}"#).unwrap();
+    let mut opts = options(project.path());
+    opts.config_path = Some(non_object_target);
+    let error = load(opts).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_INVALID");
+    assert!(error.to_string().contains("targets[0]：必須是物件"));
+
+    let no_suggestion = project.path().join("unknown.toml");
+    fs::write(
+        &no_suggestion,
+        complete_config("entirely_unrelated = true\n"),
+    )
+    .unwrap();
+    let mut opts = options(project.path());
+    opts.config_path = Some(no_suggestion);
+    let error = load(opts).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_INVALID");
+    assert_eq!(error.to_string(), "未知欄位 entirely_unrelated");
+
+    let invalid_value = project.path().join("invalid-value.toml");
+    fs::write(&invalid_value, "version = 1\nsheet = 42\n").unwrap();
+    let mut opts = options(project.path());
+    opts.config_path = Some(invalid_value.clone());
+    let error = load(opts).unwrap_err();
+    assert_eq!(error.code(), "CONFIG_INVALID");
+    assert!(
+        error
+            .to_string()
+            .contains(&invalid_value.display().to_string())
+    );
+    assert!(error.to_string().contains("config"));
+}

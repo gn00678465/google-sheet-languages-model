@@ -219,3 +219,15 @@ impl Cli {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_arguments_preserve_every_explicit_choice() {
+        assert_eq!(ColorChoice::from(ColorArg::Auto), ColorChoice::Auto);
+        assert_eq!(ColorChoice::from(ColorArg::Always), ColorChoice::Always);
+        assert_eq!(ColorChoice::from(ColorArg::Never), ColorChoice::Never);
+    }
+}

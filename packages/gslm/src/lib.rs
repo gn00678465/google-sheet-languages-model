@@ -123,3 +123,14 @@ pub fn orphan_keys(model: JsModel) -> Result<Vec<String>> {
 pub fn version() -> String {
     env!("GSLM_PACKAGE_VERSION").to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn model_adapter_uses_default_or_custom_separator() {
+        assert_eq!(sep(&None), DEFAULT_SEPARATOR);
+        assert_eq!(sep(&Some("/".into())), "/");
+    }
+}

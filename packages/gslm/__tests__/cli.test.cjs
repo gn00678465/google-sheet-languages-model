@@ -2,12 +2,12 @@
 // normal node:http server, so argv and exit codes run through the real bridge.
 const { after, before, describe, it } = require('node:test')
 const assert = require('node:assert/strict')
-const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
+const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { spawn } = require('node:child_process')
 const http = require('node:http')
-const { loadConfig, pull, runCli } = require('../index.js')
+const { loadConfig, pull, push, runCli } = require('../index.js')
 
 let server
 let baseUrl
@@ -97,6 +97,41 @@ describe('gslm bin CLI', () => {
       assert.equal(summary.created, 0)
       assert.equal(summary.unchanged, 2)
       assert.deepEqual(requests.map((request) => request.method), ['GET'])
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+
+  it('maps the high-level push summary and honours dry-run without touching the server', async () => {
+    const cwd = makeProject()
+    try {
+      writeFileSync(join(cwd, 'gslm.toml'), config())
+      mkdirSync(join(cwd, 'locales'))
+      writeFileSync(join(cwd, 'locales/en.json'), '{"app":{"title":"Title"}}\n')
+      writeFileSync(join(cwd, 'locales/zh-TW.json'), '{"app":{"title":"標題"}}\n')
+      const target = loadConfig({ cwd, env: {} }).targets[0]
+
+      requests = []
+      const preview = await push(target, { dryRun: true, baseUrl, accessToken: 'fixture-token' })
+      assert.deepEqual(requests, [])
+      assert.equal(preview.target, 'default')
+      assert.equal(preview.rows, 2)
+      assert.equal(preview.columns, 3)
+      assert.deepEqual(preview.localeKeys, [
+        { locale: 'en', keys: 1 },
+        { locale: 'zh-TW', keys: 1 },
+      ])
+      assert.deepEqual(preview.orphanKeys, [])
+      assert.deepEqual(preview.warnings, [])
+
+      requests = []
+      const written = await push(target, { baseUrl, accessToken: 'fixture-token' })
+      assert.equal(written.rows, 2)
+      assert.deepEqual(requests.map((request) => request.method), ['POST', 'PUT'])
+      assert.deepEqual(JSON.parse(requests[1].body).values, [
+        ['key', 'en', 'zh-TW'],
+        ['app.title', 'Title', '標題'],
+      ])
     } finally {
       rmSync(cwd, { recursive: true, force: true })
     }

@@ -132,3 +132,129 @@ impl<'a> Reporter<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{FileSummary, WriteOutcome};
+    use gslm_config::{CredentialsSource, ResolvedTarget};
+    use gslm_core::Format;
+    use std::path::PathBuf;
+
+    fn target() -> ResolvedTarget {
+        ResolvedTarget {
+            name: "web".into(),
+            sheet: "sheet".into(),
+            tab: "Main".into(),
+            locales: vec!["en".into(), "zh-TW".into()],
+            path: PathBuf::from("/project/locales/{locale}.json"),
+            format: Format::Nest,
+            key_separator: ".".into(),
+            credentials: CredentialsSource::ApplicationDefault,
+        }
+    }
+
+    #[test]
+    fn reporter_routes_dry_run_details_and_colored_warnings_to_expected_streams() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        {
+            let mut reporter = Reporter::new(
+                &mut stdout,
+                &mut stderr,
+                false,
+                true,
+                Some(ColorChoice::Always),
+                Some(false),
+                true,
+            );
+            let target = target();
+            reporter.warning("needs attention");
+            reporter.target(&target);
+            reporter.request_details(&target, true);
+            reporter.pull_summary(
+                &PullSummary {
+                    target: "web".into(),
+                    files: vec![FileSummary {
+                        locale: "en".into(),
+                        path: PathBuf::from("/project/locales/en.json"),
+                        keys: 2,
+                        outcome: Some(WriteOutcome::Created),
+                    }],
+                    created: 1,
+                    updated: 0,
+                    unchanged: 0,
+                },
+                true,
+            );
+            reporter.push_summary(
+                &PushSummary {
+                    target: "web".into(),
+                    rows: 3,
+                    columns: 3,
+                    locale_keys: vec![("en".into(), 2), ("zh-TW".into(), 1)],
+                    orphan_keys: vec!["orphan".into()],
+                    warnings: Vec::new(),
+                },
+                true,
+            );
+        }
+
+        let stdout = String::from_utf8(stdout).unwrap();
+        let stderr = String::from_utf8(stderr).unwrap();
+        assert!(stdout.contains("預覽模式會寫入 1 個檔案"));
+        assert!(stdout.contains("預覽模式會寫入 3 列、3 欄"));
+        assert!(stdout.contains("孤立 key：orphan"));
+        assert!(stdout.contains("en：2 個 key"));
+        assert!(stderr.contains("\u{1b}[33m警告：\u{1b}[0mneeds attention"));
+        assert!(stderr.contains("目標 web：Sheet=sheet"));
+        assert!(stderr.contains("詳細：讀取 Sheet sheet 的 Tab Main"));
+        assert!(stderr.contains("Catalog：/project/locales/en.json"));
+    }
+
+    #[test]
+    fn quiet_reporter_suppresses_non_warning_progress() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        {
+            let mut reporter = Reporter::new(
+                &mut stdout,
+                &mut stderr,
+                true,
+                false,
+                Some(ColorChoice::Auto),
+                Some(true),
+                false,
+            );
+            reporter.target(&target());
+            reporter.pull_summary(
+                &PullSummary {
+                    target: "web".into(),
+                    files: Vec::new(),
+                    created: 0,
+                    updated: 0,
+                    unchanged: 0,
+                },
+                false,
+            );
+            reporter.push_summary(
+                &PushSummary {
+                    target: "web".into(),
+                    rows: 1,
+                    columns: 1,
+                    locale_keys: Vec::new(),
+                    orphan_keys: Vec::new(),
+                    warnings: Vec::new(),
+                },
+                false,
+            );
+            reporter.warning("still visible");
+        }
+
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(stderr).unwrap(),
+            "\u{1b}[33m警告：\u{1b}[0mstill visible\n"
+        );
+    }
+}

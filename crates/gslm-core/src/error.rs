@@ -45,3 +45,19 @@ pub(crate) fn json_type_name(value: &serde_json::Value) -> &'static str {
         Object(_) => "object",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::json_type_name;
+    use serde_json::json;
+
+    #[test]
+    fn json_type_names_match_json_values_used_in_validation_errors() {
+        assert_eq!(json_type_name(&json!(null)), "null");
+        assert_eq!(json_type_name(&json!(true)), "boolean");
+        assert_eq!(json_type_name(&json!(1)), "number");
+        assert_eq!(json_type_name(&json!("text")), "string");
+        assert_eq!(json_type_name(&json!([])), "array");
+        assert_eq!(json_type_name(&json!({})), "object");
+    }
+}

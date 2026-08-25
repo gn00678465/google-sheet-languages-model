@@ -188,6 +188,7 @@ pub(crate) fn shape_mismatch(read: &ReadCatalog, format: Format) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+    use tempfile::tempdir;
 
     #[test]
     fn shape_detects_empty_flat_and_nested() {
@@ -212,5 +213,101 @@ mod tests {
         assert_eq!(WriteOutcome::Created.as_str(), "created");
         assert_eq!(WriteOutcome::Updated.as_str(), "updated");
         assert_eq!(WriteOutcome::Unchanged.as_str(), "unchanged");
+    }
+
+    #[test]
+    fn catalog_reader_classifies_missing_invalid_and_unreadable_inputs() {
+        let directory = tempdir().unwrap();
+        let missing = directory.path().join("missing.json");
+        assert!(read_catalog(&missing, ".").unwrap().is_none());
+
+        let invalid = directory.path().join("invalid.json");
+        fs::write(&invalid, "not json").unwrap();
+        let error = read_catalog(&invalid, ".").unwrap_err();
+        assert!(matches!(
+            error,
+            CliError::Catalog { ref path, ref reason }
+                if path == &invalid && reason == "JSON 格式無效"
+        ));
+
+        let array = directory.path().join("array.json");
+        fs::write(&array, r#"{"items":["not supported"]}"#).unwrap();
+        let error = read_catalog(&array, ".").unwrap_err();
+        assert!(matches!(
+            error,
+            CliError::Catalog { ref path, ref reason }
+                if path == &array && reason.contains("Catalog 不支援陣列（key：items）")
+        ));
+
+        let unreadable = directory.path().join("directory.json");
+        fs::create_dir(&unreadable).unwrap();
+        let error = read_catalog(&unreadable, ".").unwrap_err();
+        assert!(matches!(
+            error,
+            CliError::Catalog { ref path, ref reason }
+                if path == &unreadable && reason == "無法讀取檔案"
+        ));
+    }
+
+    #[test]
+    fn catalog_writer_reports_content_outcomes_and_parent_io_failures() {
+        let directory = tempdir().unwrap();
+        let output = directory.path().join("nested/locales/en.json");
+        let mut catalog = Catalog::from_entries([("title", "Title")]);
+
+        assert_eq!(
+            write_catalog(&output, &catalog, Format::Nest, ".").unwrap(),
+            WriteOutcome::Created
+        );
+        assert_eq!(
+            fs::read_to_string(&output).unwrap(),
+            "{\n  \"title\": \"Title\"\n}\n"
+        );
+        assert_eq!(
+            write_catalog(&output, &catalog, Format::Nest, ".").unwrap(),
+            WriteOutcome::Unchanged
+        );
+        catalog.insert("body", "Body");
+        assert_eq!(
+            write_catalog(&output, &catalog, Format::Flat, ".").unwrap(),
+            WriteOutcome::Updated
+        );
+        assert_eq!(
+            fs::read_to_string(&output).unwrap(),
+            "{\n  \"title\": \"Title\",\n  \"body\": \"Body\"\n}\n"
+        );
+
+        let blocking_parent = directory.path().join("not-a-directory");
+        fs::write(&blocking_parent, "file").unwrap();
+        let blocked_output = blocking_parent.join("en.json");
+        let error = write_catalog(&blocked_output, &catalog, Format::Flat, ".").unwrap_err();
+        assert!(matches!(
+            error,
+            CliError::Io { ref path, .. } if path == &blocked_output
+        ));
+    }
+
+    #[test]
+    fn format_drift_requires_a_real_shape_mismatch() {
+        let nested = ReadCatalog {
+            catalog: Catalog::default(),
+            shape: Shape::Nested,
+            flat_key_has_separator: false,
+        };
+        let flat_with_separator = ReadCatalog {
+            catalog: Catalog::default(),
+            shape: Shape::Flat,
+            flat_key_has_separator: true,
+        };
+        let flat_without_separator = ReadCatalog {
+            catalog: Catalog::default(),
+            shape: Shape::Flat,
+            flat_key_has_separator: false,
+        };
+
+        assert!(shape_mismatch(&nested, Format::Flat));
+        assert!(shape_mismatch(&flat_with_separator, Format::Nest));
+        assert!(!shape_mismatch(&flat_without_separator, Format::Nest));
+        assert!(!shape_mismatch(&nested, Format::Nest));
     }
 }

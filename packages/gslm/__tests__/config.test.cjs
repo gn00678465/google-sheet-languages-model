@@ -4,7 +4,7 @@ const os = require('node:os')
 const path = require('node:path')
 const test = require('node:test')
 
-const { configSchema, loadConfig, SheetsClient } = require('../index.js')
+const { configSchema, loadConfig, pull, SheetsClient } = require('../index.js')
 
 function tempdir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'gslm-config-'))
@@ -55,6 +55,15 @@ test('loadConfig surfaces stable ConfigError codes and configSchema has its id',
   assert.equal(
     configSchema().$id,
     'https://gn00678465.github.io/google-sheet-languages-model/schema/v1.json',
+  )
+
+  assert.throws(
+    () => loadConfig({ cwd: directory, overrides: { format: 'yaml' } }),
+    (error) =>
+      error &&
+      error.code === 'CONFIG_INVALID' &&
+      /overrides\.format/.test(error.message) &&
+      /nest` 或 `flat/.test(error.message),
   )
 })
 
@@ -115,5 +124,41 @@ test('loadConfig never echoes a malformed dotenv secret', () => {
     () => loadConfig({ cwd: directory }),
     (error) =>
       error && error.code === 'CONFIG_PARSE' && !error.message.includes(secret),
+  )
+})
+
+test('high-level pull maps native network failures to a stable public error', async () => {
+  const directory = tempdir()
+  fs.writeFileSync(
+    path.join(directory, 'gslm.toml'),
+    'version = 1\nsheet = "sheet-id"\ntab = "Main"\nlocales = ["en"]\npath = "locales/{locale}.json"\n',
+  )
+  const target = loadConfig({ cwd: directory, env: {} }).targets[0]
+
+  await assert.rejects(
+    pull(target, { baseUrl: 'http://127.0.0.1:1', accessToken: 'fixture-token' }),
+    (error) =>
+      error &&
+      error.code === 'NETWORK' &&
+      /無法連線至 Google Sheets API/.test(error.message) &&
+      !/^\[/.test(error.message),
+  )
+})
+
+test('high-level calls reject a mutated Target format before performing network I/O', async () => {
+  const directory = tempdir()
+  fs.writeFileSync(
+    path.join(directory, 'gslm.toml'),
+    'version = 1\nsheet = "sheet-id"\ntab = "Main"\nlocales = ["en"]\npath = "locales/{locale}.json"\n',
+  )
+  const target = loadConfig({ cwd: directory, env: {} }).targets[0]
+  target.format = 'yaml'
+
+  await assert.rejects(
+    pull(target, { baseUrl: 'http://127.0.0.1:1', accessToken: 'fixture-token' }),
+    (error) =>
+      error &&
+      error.code === 'CONFIG_INVALID' &&
+      /Target 的 format 必須是 nest 或 flat/.test(error.message),
   )
 })

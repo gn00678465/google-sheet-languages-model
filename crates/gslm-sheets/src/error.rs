@@ -60,3 +60,76 @@ impl SheetsError {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SheetsError;
+
+    #[test]
+    fn stable_codes_and_retry_classification_cover_every_error_kind() {
+        let errors = vec![
+            (
+                SheetsError::Credentials("bad key".into()),
+                "CREDENTIALS",
+                false,
+            ),
+            (SheetsError::Auth("expired".into()), "AUTH", false),
+            (
+                SheetsError::PermissionDenied {
+                    sheet_id: "sheet".into(),
+                    service_account_email: None,
+                },
+                "PERMISSION_DENIED",
+                false,
+            ),
+            (
+                SheetsError::SheetNotFound {
+                    sheet_id: "sheet".into(),
+                },
+                "SHEET_NOT_FOUND",
+                false,
+            ),
+            (
+                SheetsError::TabNotFound {
+                    sheet_id: "sheet".into(),
+                    tab: "Tab".into(),
+                },
+                "TAB_NOT_FOUND",
+                false,
+            ),
+            (SheetsError::RateLimited, "RATE_LIMITED", true),
+            (
+                SheetsError::ServerError { status: 503 },
+                "SERVER_ERROR",
+                true,
+            ),
+            (
+                SheetsError::Http {
+                    status: 418,
+                    message: "teapot".into(),
+                },
+                "HTTP",
+                false,
+            ),
+            (SheetsError::Network("offline".into()), "NETWORK", true),
+            (
+                SheetsError::InvalidResponse("not JSON".into()),
+                "INVALID_RESPONSE",
+                false,
+            ),
+            (
+                SheetsError::WriteAfterClearFailed {
+                    source: Box::new(SheetsError::Network("offline".into())),
+                },
+                "WRITE_AFTER_CLEAR_FAILED",
+                false,
+            ),
+        ];
+
+        for (error, code, transient) in errors {
+            assert_eq!(error.code(), code);
+            assert_eq!(error.is_transient(), transient);
+            assert!(!error.to_string().is_empty());
+        }
+    }
+}

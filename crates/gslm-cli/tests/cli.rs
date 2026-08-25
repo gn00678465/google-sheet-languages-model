@@ -350,6 +350,28 @@ async fn pull_rejects_empty_sheet_before_overwriting_local_catalog_unless_forced
 }
 
 #[tokio::test]
+async fn pull_treats_an_unreadable_existing_catalog_as_data_to_protect() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(sheet(json!([["key", "en", "zh-TW"]])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let project = project("nest");
+    let locales = project.path().join("locales");
+    fs::create_dir(&locales).unwrap();
+    let unreadable_catalog = locales.join("en.json");
+    fs::create_dir(&unreadable_catalog).unwrap();
+
+    let (code, _, stderr) = execute(project.path(), &server, &["pull"]);
+
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[PULL_EMPTY_SHEET]"));
+    assert!(stderr.contains("本地有 1 個 key"));
+    assert!(unreadable_catalog.is_dir());
+}
+
+#[tokio::test]
 async fn push_writes_orphans_at_the_end_and_reports_them() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -533,4 +555,50 @@ format = "nest"
     assert_eq!(code, 0, "{stderr}");
     let (code, _, stderr) = execute(project.path(), &server, &["push"]);
     assert_eq!(code, 0, "{stderr}");
+}
+
+#[tokio::test]
+async fn command_errors_and_init_jsonc_keep_exit_codes_and_output_channels_stable() {
+    let server = MockServer::start().await;
+    let project = tempfile::tempdir().unwrap();
+
+    let (code, stdout, stderr) = execute(project.path(), &server, &[]);
+    assert_eq!(code, 2);
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("同步 Google Sheets 與本地 i18n Catalog"));
+    assert!(stderr.contains("用法：gslm"));
+
+    let (code, stdout, stderr) = execute(project.path(), &server, &["migrate"]);
+    assert_eq!(code, 1);
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("[MIGRATE_JS_ONLY]"));
+    assert!(stderr.contains("JS 入口執行 migrate"));
+
+    let (code, stdout, stderr) = execute(
+        project.path(),
+        &server,
+        &["--quiet", "init", "--format", "jsonc"],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+    let template = fs::read_to_string(project.path().join("gslm.jsonc")).unwrap();
+    assert!(template.contains("\"$schema\""));
+    let config = gslm_config::load(gslm_config::LoadOptions {
+        cwd: project.path().to_path_buf(),
+        env: Default::default(),
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(config.targets[0].name, "main");
+
+    let legacy_project = tempfile::tempdir().unwrap();
+    fs::write(
+        legacy_project.path().join("gslm.config.cjs"),
+        "module.exports = {}\n",
+    )
+    .unwrap();
+    let (code, _, stderr) = execute(legacy_project.path(), &server, &["init"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[MIGRATE_JS_ONLY]"));
 }

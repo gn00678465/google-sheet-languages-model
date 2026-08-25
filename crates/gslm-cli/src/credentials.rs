@@ -67,4 +67,23 @@ mod tests {
         assert_eq!(details.env_name.as_deref(), Some("GSLM_SERVICE_ACCOUNT"));
         assert!(!format!("{details:?}").contains("never-expose-this-secret"));
     }
+
+    #[test]
+    fn sheets_credentials_preserve_each_safe_config_source() {
+        assert!(matches!(
+            sheets_credentials(&CredentialsSource::File(PathBuf::from("service-account.json"))),
+            Credentials::ServiceAccountFile(path) if path.as_path() == std::path::Path::new("service-account.json")
+        ));
+        assert!(matches!(
+            sheets_credentials(&CredentialsSource::Json {
+                env_name: "SERVICE_ACCOUNT".into(),
+                value: "secret-json".into(),
+            }),
+            Credentials::ServiceAccountJson(value) if value == "secret-json"
+        ));
+        assert!(matches!(
+            sheets_credentials(&CredentialsSource::ApplicationDefault),
+            Credentials::ApplicationDefault
+        ));
+    }
 }

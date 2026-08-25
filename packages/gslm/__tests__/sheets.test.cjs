@@ -48,6 +48,10 @@ describe('SheetsClient', () => {
       SheetsClient.create({ credentials: { file: '/nonexistent/sa.json' } }),
       (e) => e.code === 'CREDENTIALS' && /nonexistent/.test(e.message),
     )
+    await assert.rejects(
+      SheetsClient.create({ credentials: { json: '{"type":"authorized_user"}' } }),
+      (e) => e.code === 'CREDENTIALS' && /expected "type": "service_account"/.test(e.message),
+    )
   })
 
   it('readTab returns string[][] and sends a bearer token to the encoded range', async () => {

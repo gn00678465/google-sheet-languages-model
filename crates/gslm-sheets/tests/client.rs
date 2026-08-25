@@ -250,6 +250,28 @@ async fn classifies_403_404_400_429_5xx_other() {
 }
 
 #[tokio::test]
+async fn preserves_raw_error_body_when_google_error_envelope_is_missing() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(418).set_body_string("proxy rejected request"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let error = client(&server)
+        .await
+        .read_tab(SHEET, "tab")
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        &error,
+        SheetsError::Http { status: 418, message } if message == "proxy rejected request"
+    ));
+    assert_eq!(error.code(), "HTTP");
+    assert!(error.to_string().contains("proxy rejected request"));
+}
+
+#[tokio::test]
 async fn permission_error_mentions_service_account_email() {
     #[derive(Debug)]
     struct Sa;
@@ -399,6 +421,21 @@ async fn request_timeout_is_configurable_and_reported_as_network_error() {
         .unwrap();
     let err = c.read_tab(SHEET, "i18n").await.unwrap_err();
     assert!(matches!(err, SheetsError::Network(_)), "{err:?}");
+}
+
+#[tokio::test]
+async fn rejects_an_invalid_extra_tls_root_before_any_request() {
+    let result = SheetsClient::builder(Credentials::AccessToken("tok-1".into()))
+        .extra_root_certificates([rustls::pki_types::CertificateDer::from(vec![0, 1, 2])])
+        .build()
+        .await;
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!("an invalid DER certificate must not build a client"),
+    };
+
+    assert_eq!(error.code(), "CREDENTIALS");
+    assert!(error.to_string().contains("invalid extra root certificate"));
 }
 
 /// Real TLS handshake with the bundled root store; needs network only

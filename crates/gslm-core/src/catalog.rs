@@ -141,6 +141,21 @@ mod tests {
     }
 
     #[test]
+    fn collection_accessors_preserve_insertion_order_and_values() {
+        let catalog = Catalog::from_entries([("first", "一"), ("second", "二")]);
+
+        assert_eq!(catalog.get("first"), Some("一"));
+        assert_eq!(catalog.get("missing"), None);
+        assert!(catalog.contains_key("second"));
+        assert_eq!(catalog.len(), 2);
+        assert!(!catalog.is_empty());
+        assert_eq!(
+            catalog.iter().collect::<Vec<_>>(),
+            vec![("first", "一"), ("second", "二")]
+        );
+    }
+
+    #[test]
     fn rejects_non_string_leaves_with_key() {
         for (v, kind) in [
             (json!({"a": {"n": 1}}), "number"),

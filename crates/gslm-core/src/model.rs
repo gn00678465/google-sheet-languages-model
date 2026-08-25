@@ -207,6 +207,16 @@ mod tests {
     }
 
     #[test]
+    fn empty_locale_model_has_no_source_or_ordered_keys() {
+        let model = Model::new(Vec::<String>::new());
+
+        assert_eq!(model.source_locale(), None);
+        assert!(model.orphan_keys().is_empty());
+        assert!(model.ordered_keys().is_empty());
+        assert_eq!(model.to_table(), vec![vec![KEY_HEADER.to_string()]]);
+    }
+
+    #[test]
     fn set_catalog_rejects_unknown_locale() {
         let mut m = Model::new(["en"]);
         assert_eq!(
