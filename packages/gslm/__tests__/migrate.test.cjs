@@ -72,6 +72,16 @@ test('migrateLegacyConfig protects inline credentials and documents defaults', (
       }),
     /非空字串陣列/,
   )
+  assert.throws(
+    () =>
+      migrateLegacyConfig({
+        sheetId: 'id',
+        sheetTitle: 'Main',
+        languages: 'en',
+        directory: './i18n',
+      }),
+    /非空字串陣列/,
+  )
 })
 
 test('migrateLegacyConfig emits valid TOML basic strings for controls and rejects lone surrogates', () => {

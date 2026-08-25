@@ -809,3 +809,98 @@ fn validates_non_object_targets_and_preserves_error_display_variants() {
     );
     assert!(error.to_string().contains("config"));
 }
+
+#[test]
+fn discovery_and_target_overrides_preserve_their_boundary_conditions() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        r#"version = 1
+sheet = "shared"
+tab = "Main"
+locales = ["en"]
+path = "locales/{locale}.json"
+
+[[targets]]
+name = "web"
+
+[[targets]]
+name = "mobile"
+"#,
+    )
+    .unwrap();
+    let mut opts = options(project.path());
+    opts.overrides = Overrides {
+        key_separator: Some("/".into()),
+        ..Overrides::default()
+    };
+    assert!(matches!(
+        load(opts),
+        Err(ConfigError::AmbiguousOverride { .. })
+    ));
+
+    fs::remove_file(project.path().join("gslm.toml")).unwrap();
+    fs::write(
+        project.path().join("gslm.toml"),
+        "version = 1\nsheet = \"id\"\ntab = \"Main\"\nlocales = [\"en\"]\npath = \"{locale}.json\"\n",
+    )
+    .unwrap();
+    assert!(load(options(project.path())).unwrap().warnings.is_empty());
+    fs::write(
+        project.path().join("gslm.json"),
+        r#"{"version":1,"sheet":"other","tab":"Main","locales":["en"],"path":"{locale}.json"}"#,
+    )
+    .unwrap();
+    assert_eq!(load(options(project.path())).unwrap().warnings.len(), 1);
+}
+
+#[test]
+fn legacy_discovery_requires_all_cli_target_fields() {
+    let project = tempdir().unwrap();
+    fs::write(
+        project.path().join("gslm.config.mjs"),
+        "export default {}\n",
+    )
+    .unwrap();
+    let complete = Overrides {
+        sheet: Some("id".into()),
+        tab: Some("Main".into()),
+        locales: Some(vec!["en".into()]),
+        path: Some("locales/{locale}.json".into()),
+        ..Overrides::default()
+    };
+    let mut opts = options(project.path());
+    opts.overrides = complete;
+    assert_eq!(load(opts).unwrap().targets[0].name, "cli");
+
+    for overrides in [
+        Overrides {
+            tab: Some("Main".into()),
+            locales: Some(vec!["en".into()]),
+            path: Some("locales/{locale}.json".into()),
+            ..Overrides::default()
+        },
+        Overrides {
+            sheet: Some("id".into()),
+            locales: Some(vec!["en".into()]),
+            path: Some("locales/{locale}.json".into()),
+            ..Overrides::default()
+        },
+        Overrides {
+            sheet: Some("id".into()),
+            tab: Some("Main".into()),
+            path: Some("locales/{locale}.json".into()),
+            ..Overrides::default()
+        },
+        Overrides {
+            sheet: Some("id".into()),
+            tab: Some("Main".into()),
+            locales: Some(vec!["en".into()]),
+            ..Overrides::default()
+        },
+    ] {
+        let mut opts = options(project.path());
+        opts.overrides = overrides;
+        assert!(matches!(load(opts), Err(ConfigError::Legacy { .. })));
+    }
+}

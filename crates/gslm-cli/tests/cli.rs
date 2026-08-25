@@ -602,3 +602,39 @@ async fn command_errors_and_init_jsonc_keep_exit_codes_and_output_channels_stabl
     assert_eq!(code, 1);
     assert!(stderr.contains("[MIGRATE_JS_ONLY]"));
 }
+
+#[tokio::test]
+async fn push_strict_mode_enforces_each_protection_independently() {
+    let server = MockServer::start().await;
+    let empty = project("nest");
+    let (code, _, stderr) = execute(empty.path(), &server, &["push", "--dry-run"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[PUSH_EMPTY_LOCAL]"));
+    assert_eq!(
+        execute(empty.path(), &server, &["push", "--dry-run", "--force"]).0,
+        0
+    );
+
+    let orphan = project("nest");
+    fs::create_dir(orphan.path().join("locales")).unwrap();
+    fs::write(orphan.path().join("locales/en.json"), r#"{"key":"source"}"#).unwrap();
+    fs::write(
+        orphan.path().join("locales/zh-TW.json"),
+        r#"{"orphan":"孤立"}"#,
+    )
+    .unwrap();
+    let (code, _, stderr) = execute(orphan.path(), &server, &["push", "--dry-run"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("孤立 key：orphan"));
+    let (code, _, stderr) = execute(orphan.path(), &server, &["push", "--dry-run", "--strict"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("[PUSH_STRICT]"));
+
+    let clean = project("nest");
+    fs::create_dir(clean.path().join("locales")).unwrap();
+    fs::write(clean.path().join("locales/en.json"), r#"{"key":"source"}"#).unwrap();
+    fs::write(clean.path().join("locales/zh-TW.json"), r#"{"key":"翻譯"}"#).unwrap();
+    let (code, _, stderr) = execute(clean.path(), &server, &["push", "--dry-run", "--strict"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!stderr.contains("孤立 key"));
+}
