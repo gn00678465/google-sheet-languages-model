@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict')
-const { execFileSync } = require('node:child_process')
+const { execFileSync, spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -182,4 +182,45 @@ test('gslm migrate writes a loadable TOML config only when requested', () => {
     keySeparator: '.',
     credentials: { kind: 'file', path: path.join(directory, 'credentials.json') },
   })
+})
+
+test('gslm migrate reports actionable argument, discovery, and overwrite errors', () => {
+  const directory = tempdir()
+  const bin = path.join(__dirname, '..', 'bin', 'gslm.js')
+  const run = (...args) =>
+    spawnSync(process.execPath, [bin, 'migrate', ...args], {
+      cwd: directory,
+      encoding: 'utf8',
+    })
+
+  let result = run()
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /找不到舊設定檔/)
+
+  result = run('--from')
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /--from 需要一個設定檔路徑/)
+
+  result = run('--unknown')
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /不支援的 migrate 參數：--unknown/)
+
+  result = run('--from', 'missing.cjs')
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /找不到舊設定檔：/)
+
+  fs.writeFileSync(
+    path.join(directory, 'gslm.config.cjs'),
+    "module.exports = { sheetId: process.env.GSLM_MIGRATE_TEST_SHEET || 'id', sheetTitle: 'Main', languages: ['en'], directory: 'i18n' }\n",
+  )
+  fs.writeFileSync(path.join(directory, 'gslm.toml'), 'existing = true\n')
+
+  result = run('--write')
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /已存在；使用 --force 才會覆寫/)
+
+  result = run('--write', '--force')
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /已寫入 /)
+  assert.match(result.stderr, /舊設定使用環境變數；值已在遷移時具體化/)
 })
