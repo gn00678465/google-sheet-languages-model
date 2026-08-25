@@ -49,6 +49,10 @@ jobs:
         run: cargo test -p gslm-sheets --test client tls_handshake -- --ignored
       - run: pnpm -C packages/gslm build:debug
       - run: pnpm -C packages/gslm test
+      # Kept out of `pnpm test`: the native and container test jobs run it
+      # without node_modules, where `tsc` is unavailable.
+      - name: Public type declarations compile for TypeScript consumers
+        run: pnpm -C packages/gslm typecheck
 
   build:
     name: build ${{ matrix.settings.target }}
@@ -242,6 +246,18 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          version="${{ steps.ver.outputs.version }}"
+          # A prerelease must never take the `latest` dist-tag: `pnpm add` would
+          # then install the beta. `npm_config_tag` is inherited by the platform
+          # package publishes that `napi prepublish` spawns.
+          if [[ "$version" == *-* ]]; then
+            identifier="${version#*-}"
+            npm_config_tag="${identifier%%.*}"
+            export npm_config_tag
+            echo "publishing $version under dist-tag $npm_config_tag"
+          else
+            echo "publishing $version under dist-tag latest"
+          fi
           pnpm exec napi prepublish -t npm --no-gh-release
           node -p "require('./package.json').optionalDependencies"
           npm publish --ignore-scripts

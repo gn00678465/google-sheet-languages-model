@@ -16,6 +16,10 @@ pnpm -C packages/gslm build:debug
 # JavaScript binding and bin end-to-end tests
 pnpm -C packages/gslm test
 
+# Public .d.ts compiles for TypeScript consumers. Deliberately not part of
+# `test`, which also runs in containers that have no node_modules.
+pnpm -C packages/gslm typecheck
+
 # Rust formatting, linting, and all crate tests
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings

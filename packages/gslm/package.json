@@ -40,7 +40,7 @@
     "artifacts": "napi artifacts -d ../../artifacts",
     "create-npm-dirs": "napi create-npm-dirs",
     "version": "napi version",
-    "test": "node --test __tests__/flatten.test.cjs __tests__/conversions.test.cjs __tests__/sheets.test.cjs __tests__/config.test.cjs __tests__/migrate.test.cjs __tests__/cli.test.cjs __tests__/cli-security.test.cjs __tests__/cli-signal.test.cjs __tests__/target-lifetime.test.cjs && pnpm run typecheck",
+    "test": "node --test __tests__/flatten.test.cjs __tests__/conversions.test.cjs __tests__/sheets.test.cjs __tests__/config.test.cjs __tests__/migrate.test.cjs __tests__/cli.test.cjs __tests__/cli-security.test.cjs __tests__/cli-signal.test.cjs __tests__/target-lifetime.test.cjs",
     "typecheck": "tsc --noEmit --strict --moduleResolution node --target ES2022 index.d.ts __tests__/types/public-api.ts"
   },
   "napi": {

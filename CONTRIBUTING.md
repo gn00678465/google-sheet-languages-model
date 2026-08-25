@@ -9,6 +9,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 pnpm -C packages/gslm build:debug
 pnpm -C packages/gslm test
+pnpm -C packages/gslm typecheck
 ```
 
 請將核心行為放在對應 Rust crate；`packages/gslm` 僅負責 napi 資料轉換和
