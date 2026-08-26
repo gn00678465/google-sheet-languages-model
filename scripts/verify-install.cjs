@@ -6,7 +6,13 @@
 // launcher reports the expected version.
 const { readdirSync, existsSync } = require('node:fs')
 const { join, sep } = require('node:path')
+const { createRequire } = require('node:module')
 const { execFileSync } = require('node:child_process')
+
+// This script lives in the repo but inspects a throwaway project in `cwd`.
+// A bare require() would resolve against the script's own directory, so every
+// lookup of the installed package has to go through the project's root.
+const fromProject = createRequire(join(process.cwd(), 'package.json'))
 
 const SCOPE = '@gn00678465'
 const NAME = 'google-sheet-languages-model'
@@ -22,22 +28,41 @@ const fail = (msg) => {
 }
 const ok = (msg) => console.log(`✓ ${msg}`)
 
-// (1) exactly one platform sub-package
+// The sub-package this host must end up running.
+function expectedSuffix() {
+  const { platform, arch } = process
+  if (platform === 'win32') return `${arch}-msvc`
+  if (platform === 'darwin') return arch
+  if (platform !== 'linux') fail(`unsupported platform ${platform}`)
+  // `process.report` names the runtime glibc only when linked against it.
+  const glibc = process.report?.getReport()?.header?.glibcVersionRuntime
+  return `${arch}-${glibc ? 'gnu' : 'musl'}`
+}
+
+// (1) the sub-package for this host is installed.
+// npm only filters optionalDependencies by the `libc` field from v11 on, so
+// older npm also unpacks the sibling libc build. That is inert — the loader
+// still has to pick the right one, which (2) asserts — but anything beyond a
+// libc sibling means the os/cpu filtering itself is broken.
 const scopeDir = join(process.cwd(), 'node_modules', SCOPE)
 if (!existsSync(scopeDir)) fail(`${scopeDir} does not exist`)
 const platformPkgs = readdirSync(scopeDir).filter((d) => d.startsWith(`${NAME}-`))
-if (platformPkgs.length !== 1) {
-  fail(`expected exactly 1 platform package, found ${platformPkgs.length}: ${platformPkgs.join(', ')}`)
+const wanted = `${NAME}-${expectedSuffix()}`
+if (!platformPkgs.includes(wanted)) {
+  fail(`expected ${wanted} to be installed, found: ${platformPkgs.join(', ') || 'none'}`)
 }
-ok(`single platform package installed: ${platformPkgs[0]}`)
+const foreign = platformPkgs.filter((d) => d !== wanted && d.replace(/-(gnu|musl)$/, '') !== wanted.replace(/-(gnu|musl)$/, ''))
+if (foreign.length) {
+  fail(`packages for other platforms were installed: ${foreign.join(', ')}`)
+}
+ok(`platform package installed: ${wanted}${platformPkgs.length > 1 ? ` (plus libc sibling ${platformPkgs.filter((d) => d !== wanted).join(', ')})` : ''}`)
 
 // (2) binding loads — from that sub-package — and behaves
-const pkg = require(`${SCOPE}/${NAME}`)
+const pkg = fromProject(`${SCOPE}/${NAME}`)
 const loadedNative = Object.keys(require.cache).find((k) => k.endsWith('.node'))
 if (!loadedNative) fail('no .node module found in require.cache after loading the package')
-const expectedDir = `${sep}${NAME}-${platformPkgs[0].slice(NAME.length + 1)}${sep}`
-if (!loadedNative.includes(expectedDir)) {
-  fail(`loaded ${loadedNative}, which is not inside the installed sub-package ${platformPkgs[0]}`)
+if (!loadedNative.includes(`${sep}${wanted}${sep}`)) {
+  fail(`loaded ${loadedNative}, which is not inside the expected sub-package ${wanted}`)
 }
 ok(`binding loaded from ${loadedNative}`)
 

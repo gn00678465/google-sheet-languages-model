@@ -4,8 +4,17 @@ name: napi
 #
 #   push to rewrite/** or PR  → lint + build + test + publish (dry-run)
 #   push tag napi-v<version>  → lint + build + test + publish + verify-install
+#   workflow_dispatch         → verify-install only, against an already
+#                               published version (a release cannot be
+#                               republished, so re-verifying needs its own door)
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Published version to verify (e.g. 1.0.0-beta.1)'
+        required: true
+        type: string
   push:
     branches: ['rewrite/**']
     tags: ['napi-v*']
@@ -29,6 +38,7 @@ concurrency:
 
 jobs:
   lint:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +66,7 @@ jobs:
 
   build:
     name: build ${{ matrix.settings.target }}
+    if: github.event_name != 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -122,6 +133,7 @@ jobs:
   test-native:
     name: test ${{ matrix.settings.target }} node@${{ matrix.node }}
     needs: build
+    if: github.event_name != 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -153,6 +165,7 @@ jobs:
   test-linux-docker:
     name: test ${{ matrix.settings.target }} node@${{ matrix.node }}
     needs: build
+    if: github.event_name != 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -186,6 +199,7 @@ jobs:
 
   publish:
     needs: [lint, test-native, test-linux-docker]
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -265,7 +279,7 @@ jobs:
   verify-install:
     name: verify-install ${{ matrix.settings.label }}
     needs: publish
-    if: needs.publish.outputs.is-release == 'true'
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.publish.outputs.is-release == 'true')
     strategy:
       fail-fast: false
       matrix:
@@ -292,12 +306,12 @@ jobs:
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: sh scripts/verify-install.sh "${{ needs.publish.outputs.version }}"
+        run: sh scripts/verify-install.sh "${{ inputs.version || needs.publish.outputs.version }}"
 
   verify-install-musl:
     name: verify-install ${{ matrix.label }}
     needs: publish
-    if: needs.publish.outputs.is-release == 'true'
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.publish.outputs.is-release == 'true')
     strategy:
       fail-fast: false
       matrix:
@@ -320,4 +334,4 @@ jobs:
           docker run --rm --platform ${{ matrix.platform }} \
             -v "${{ github.workspace }}/scripts:/scripts" \
             -e NODE_AUTH_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
-            node:22-alpine sh /scripts/verify-install.sh "${{ needs.publish.outputs.version }}"
+            node:22-alpine sh /scripts/verify-install.sh "${{ inputs.version || needs.publish.outputs.version }}"
