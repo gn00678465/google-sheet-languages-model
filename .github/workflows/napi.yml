@@ -2,7 +2,7 @@ name: napi
 
 # Build / test / publish pipeline for the napi-rs implementation.
 #
-#   push to main/rewrite/** or PR → lint + build + test + publish (dry-run)
+#   push to main/refactor/** or PR → lint + build + test + publish (dry-run)
 #   push tag napi-v<version>      → lint + build + test + publish + verify-install
 #   workflow_dispatch             → verify-install only, against an already
 #                                   published version (a release cannot be
@@ -16,7 +16,7 @@ on:
         required: true
         type: string
   push:
-    branches: ['main', 'rewrite/**']
+    branches: ['main', 'refactor/**']
     tags: ['napi-v*']
   pull_request:
     paths:

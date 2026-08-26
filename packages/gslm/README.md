@@ -70,7 +70,7 @@ node packages/gslm/bin/gslm.js --version
 2. `napi create-npm-dirs` + `napi artifacts` 組裝平台子套件（`index.js`/`index.d.ts` 取自 linux-gnu build 的產物，確保 loader 內的版本號正確），`napi prepublish` 發佈子套件並把 `optionalDependencies` 寫進主套件，再 `npm publish --ignore-scripts` 主套件到 GitHub Packages
 3. `verify-install` 在乾淨環境（linux gnu x64/arm64、alpine x64/arm64、macOS、Windows）執行 `scripts/verify-install.sh`：從 GitHub Packages 安裝、跑 `scripts/verify-install.cjs`、再測 `npm i -g` 後的 `gslm --version`
 
-PR 與 `rewrite/**` 分支的 push 跑同樣流程但 publish 為 `--dry-run`。
+PR 與 `refactor/**` 分支的 push 跑同樣流程但 publish 為 `--dry-run`。
 
 手動驗證已發佈版本：
 
