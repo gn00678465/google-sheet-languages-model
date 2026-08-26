@@ -38,4 +38,12 @@ node ../packages/gslm/bin/gslm.js push --dry-run
 env = "GSLM_CREDENTIALS_JSON"
 ```
 
-然後將完整 JSON 放在未提交的 `.env`（可參考 `.env.example`）。
+然後將完整 JSON 放在未提交的 `.env`（可參考 `.env.example`）。JSON 必須是
+單行且**加上引號**，否則 `.env` 無法解析：
+
+```dotenv
+GSLM_CREDENTIALS_JSON='{"type":"service_account","private_key":"-----BEGIN PRIVATE KEY-----\n...","client_email":"..."}'
+```
+
+`.env` 只在缺少同名環境變數時生效 —— 真實環境變數與 CLI 旗標都優先於它。
+用 `--no-dotenv` 可完全停用 `.env`。
