@@ -16,6 +16,7 @@ node "$SCRIPT_DIR/verify-install.cjs" "$VERSION"
 
 cp .npmrc "$HOME/.npmrc"
 npm install -g "${PKG_NAME}@${VERSION}"
+# clap prints `<program> <version>`.
 out="$(gslm --version)"
-[ "$out" = "$VERSION" ] || { echo "✗ global gslm --version printed '$out', expected '$VERSION'"; exit 1; }
+[ "$out" = "gslm $VERSION" ] || { echo "✗ global gslm --version printed '$out', expected 'gslm $VERSION'"; exit 1; }
 echo "✓ global gslm --version = $out"
