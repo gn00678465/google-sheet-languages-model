@@ -142,3 +142,25 @@ for (const name of [
 }
 
 module.exports = exported
+
+// `module.exports = <variable>` plus dynamic getters is invisible to
+// cjs-module-lexer, so Node finds no named exports and
+// `import { pull } from '@gn00678465/google-sheet-languages-model'` throws.
+// This never-executed assignment is the annotation the lexer does read; it
+// must list every name above.
+0 &&
+  (module.exports = {
+    SheetsClient,
+    loadConfig,
+    configSchema,
+    migrateLegacyConfig,
+    runCli,
+    pull,
+    push,
+    flatten,
+    unflatten,
+    sheetToModel,
+    modelToSheet,
+    orphanKeys,
+    version,
+  })
