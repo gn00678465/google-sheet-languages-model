@@ -8,7 +8,10 @@ export default defineConfig({
   tag: 'napi-v%s',
   push: true,
   confirm: true,
+  // `all: true` commits whatever else is in the tree along with the version
+  // bump — the changelog `execute` writes needs it. It also makes bumpp skip
+  // its working-tree check, so only release from a clean tree.
+  all: true,
   execute: 'pnpm run changelog',
   release: false,
-  all: true,
 })

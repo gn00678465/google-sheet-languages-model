@@ -41,7 +41,7 @@
     "create-npm-dirs": "napi create-npm-dirs",
     "version": "napi version",
     "test": "node --test __tests__/flatten.test.cjs __tests__/conversions.test.cjs __tests__/sheets.test.cjs __tests__/config.test.cjs __tests__/migrate.test.cjs __tests__/cli.test.cjs __tests__/cli-security.test.cjs __tests__/cli-signal.test.cjs __tests__/target-lifetime.test.cjs __tests__/esm-exports.test.cjs",
-    "typecheck": "tsc --noEmit --strict --moduleResolution node --target ES2022 index.d.ts __tests__/types/public-api.ts"
+    "typecheck": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target ES2022 index.d.ts __tests__/types/public-api.ts && tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2022 index.d.ts __tests__/types/public-api.ts"
   },
   "napi": {
     "binaryName": "gslm",
@@ -57,6 +57,6 @@
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.8.0",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }
