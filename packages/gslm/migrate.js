@@ -1,5 +1,5 @@
 const SCHEMA_URL =
-  'https://gn00678465.github.io/google-sheet-languages-model/schema/v1.json'
+  'https://raw.githubusercontent.com/gn00678465/google-sheet-languages-model/main/docs/schema/v1.json'
 
 const LEGACY_FIELDS = new Set([
   'sheetId',

@@ -18,7 +18,7 @@ pnpm add -D @gn00678465/google-sheet-languages-model
 在專案根目錄建立 `gslm.toml`：
 
 ```toml
-#:schema https://gn00678465.github.io/google-sheet-languages-model/schema/v1.json
+#:schema https://raw.githubusercontent.com/gn00678465/google-sheet-languages-model/main/docs/schema/v1.json
 version = 1
 sheet = "YOUR_GOOGLE_SHEET_ID"
 tab = "i18n"

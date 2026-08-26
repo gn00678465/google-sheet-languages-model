@@ -21,7 +21,7 @@ const LEGACY_NAMES: [&str; 4] = [
     "gslm.config.mjs",
     "gslm.config.cjs",
 ];
-const SCHEMA_ID: &str = "https://gn00678465.github.io/google-sheet-languages-model/schema/v1.json";
+const SCHEMA_ID: &str = "https://raw.githubusercontent.com/gn00678465/google-sheet-languages-model/main/docs/schema/v1.json";
 
 /// A source for the service-account credentials of a Target.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -54,7 +54,7 @@ test('loadConfig surfaces stable ConfigError codes and configSchema has its id',
   )
   assert.equal(
     configSchema().$id,
-    'https://gn00678465.github.io/google-sheet-languages-model/schema/v1.json',
+    'https://raw.githubusercontent.com/gn00678465/google-sheet-languages-model/main/docs/schema/v1.json',
   )
 
   assert.throws(

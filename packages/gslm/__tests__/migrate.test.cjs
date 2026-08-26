@@ -22,7 +22,7 @@ test('migrateLegacyConfig maps legacy values into deterministic TOML', () => {
   })
 
   assert.deepEqual(result.warnings, [])
-  assert.match(result.toml, /^#:schema https:\/\/gn00678465\.github\.io\/google-sheet-languages-model\/schema\/v1\.json\n/)
+  assert.match(result.toml, /^#:schema https:\/\/raw\.githubusercontent\.com\/gn00678465\/google-sheet-languages-model\/main\/docs\/schema\/v1\.json\n/)
   assert.match(result.toml, /version = 1\n/)
   assert.match(result.toml, /sheet = "sheet-id"\n/)
   assert.match(result.toml, /tab = "Main"\n/)

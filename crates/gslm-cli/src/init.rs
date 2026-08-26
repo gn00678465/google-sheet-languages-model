@@ -3,7 +3,7 @@ use crate::args::{InitArgs, InitFormat};
 use std::fs;
 use std::path::Path;
 
-const TOML_TEMPLATE: &str = r#"#:schema https://gn00678465.github.io/google-sheet-languages-model/schema/v1.json
+const TOML_TEMPLATE: &str = r#"#:schema https://raw.githubusercontent.com/gn00678465/google-sheet-languages-model/main/docs/schema/v1.json
 # gslm 設定檔。第一個 Locale 是來源語言，決定 Sheet 的 key 順序。
 version = 1
 
@@ -22,7 +22,7 @@ file = "./service-account.json"
 "#;
 
 const JSONC_TEMPLATE: &str = r#"{
-  "$schema": "https://gn00678465.github.io/google-sheet-languages-model/schema/v1.json",
+  "$schema": "https://raw.githubusercontent.com/gn00678465/google-sheet-languages-model/main/docs/schema/v1.json",
   "version": 1,
   "targets": [
     {
