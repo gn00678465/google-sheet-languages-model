@@ -4,6 +4,7 @@ name: napi
 #
 #   push to main/refactor/** or PR → lint + build + test + publish (dry-run)
 #   push tag napi-v<version>      → lint + build + test + publish + verify-install
+#                                   + GitHub Release
 #   workflow_dispatch             → verify-install only, against an already
 #                                   published version (a release cannot be
 #                                   republished, so re-verifying needs its own door)
@@ -335,3 +336,35 @@ jobs:
             -v "${{ github.workspace }}/scripts:/scripts" \
             -e NODE_AUTH_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
             node:22-alpine sh /scripts/verify-install.sh "${{ inputs.version || needs.publish.outputs.version }}"
+
+  # The pre-rewrite publish.yml ended with a softprops/action-gh-release step;
+  # the napi pipeline that replaced it dropped that step, so tags stopped
+  # reaching the Releases page. Gated on verify-install: a Release should only
+  # announce a build that actually installs on every platform.
+  github-release:
+    needs: [publish, verify-install, verify-install-musl]
+    if: needs.publish.outputs.is-release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the GitHub Release from this version's CHANGELOG section
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${{ needs.publish.outputs.version }}"
+          notes="$(awk -v v="$version" '
+            $0 == "## " v || $0 == "## v" v { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md)"
+          if [[ -z "${notes//[[:space:]]/}" ]]; then
+            echo "::warning::no '## $version' section in CHANGELOG.md; falling back to a pointer"
+            notes="See CHANGELOG.md for the $version entry."
+          fi
+          args=(--title "v$version" --notes "$notes")
+          # A prerelease must not take over the Releases page as `Latest`.
+          if [[ "$version" == *-* ]]; then args+=(--prerelease); fi
+          gh release create "napi-v$version" "${args[@]}"
