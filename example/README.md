@@ -1,142 +1,49 @@
-# Example Usage
+# gslm CLI 範例
 
-This directory demonstrates both **CLI** and **Programmatic API** usage of `google-sheet-languages-model`.
+此目錄本身就是一個 gslm 專案：`gslm.toml` 放在專案根目錄，指令從此目錄執行
+即可自動找到它，不需要 `--config`。`path` 與 `credentials.file` 都相對於設定
+檔所在目錄解析。
 
-## Prerequisites
-
-1. **Google Service Account Credentials**
-   - Place your `credentials.json` file in this directory
-   - See [Authorization Guide](../README.md#authorization) for setup instructions
-
-2. **Environment Variables**
-   - Copy `.env.example` to `.env`
-   - Set your `SHEET_ID` in the `.env` file
-
-## Method 1: CLI with Config File (Recommended)
-
-The CLI approach is simpler and requires no code.
-
-### Configuration
-
-Edit `gslm.config.js` to match your settings:
-
-**Option 1: Using credentials file path (string)**
-
-```javascript
-export default {
-  sheetId: process.env.SHEET_ID || 'YOUR_SHEET_ID_HERE',
-  sheetTitle: 'i18n-demo',
-  credentials: './credentials.json', // File path
-  languages: ['en', 'zh', 'ja', 'fr', 'es'],
-  directory: './i18n', // Used for both input and output
-  type: 'nest',
-}
-```
-
-**Option 2: Importing credentials directly (object)**
-
-```javascript
-import credentials from './credentials.json' with { type: 'json' }
-
-export default {
-  sheetId: process.env.SHEET_ID,
-  sheetTitle: 'i18n-demo',
-  credentials: credentials, // Import object directly
-  languages: ['en', 'zh', 'ja', 'fr', 'es'],
-  directory: './i18n',
-  type: 'nest',
-}
-```
-
-**What's the difference?**
-
-- **String path**: CLI reads the file at runtime (more flexible, can change credentials without restarting)
-- **Object import**: Credentials are bundled into config (simpler, but requires rebuild if credentials change)
-
-Both methods work identically for authentication!
-
-### Usage
+將 Google service-account 憑證放為未提交的 `credentials.json`，並把
+`YOUR_GOOGLE_SHEET_ID` 改成實際 ID。
 
 ```bash
-# Pull translations from Google Sheet
+# 從 Sheet 下載，建立或更新 example/i18n/*.json
 pnpm example:cli:pull
 
-# Push translations to Google Sheet
+# 將本地 Catalog 完整寫回 Sheet
 pnpm example:cli:push
 ```
 
-**Advantages:**
-- ✅ No TypeScript code needed
-- ✅ Cross-platform compatible (Windows/Mac/Linux)
-- ✅ Clean and maintainable
-- ✅ Easy to understand for non-developers
-
-## Method 2: Programmatic API
-
-The programmatic API provides more flexibility for integration into your application.
-
-### Configuration
-
-Edit `config.ts` to set up authentication and paths:
-
-```typescript
-import { google } from 'googleapis'
-
-export const SHEET_ID = process.env.SHEET_ID as string
-export const languages = ['en', 'zh', 'ja', 'fr', 'es'] as const
-export const auth = new google.auth.GoogleAuth({
-  credentials,
-  scopes: 'https://www.googleapis.com/auth/spreadsheets',
-})
-export const folderPath = resolve(__dirname + '/i18n')
-```
-
-### Usage
+上面兩個 script 等同於在此目錄內執行：
 
 ```bash
-# Pull translations (nested structure)
-pnpm example:api:pull:nest
-
-# Pull translations (flat structure)
-pnpm example:api:pull:flat
-
-# Push translations
-pnpm example:api:push
+cd example
+node ../packages/gslm/bin/gslm.js pull
+node ../packages/gslm/bin/gslm.js push
 ```
 
-**Advantages:**
-- ✅ Full programmatic control
-- ✅ Can integrate into build processes
-- ✅ Custom logic and transformations
-- ✅ Type-safe with TypeScript
+也可以不修改檔案而預覽操作：
 
-## Which Method Should I Use?
+```bash
+cd example
+node ../packages/gslm/bin/gslm.js pull --dry-run
+node ../packages/gslm/bin/gslm.js push --dry-run
+```
 
-### Use CLI if:
-- You just need to sync translations between Google Sheets and local files
-- You prefer configuration over code
-- You want a simple, no-code solution
-- You're setting up a workflow for non-developers
+若偏好從環境變數提供憑證，請把 `[credentials]` 改為：
 
-### Use Programmatic API if:
-- You need to integrate translation sync into your application
-- You need custom processing or transformations
-- You're building a more complex i18n pipeline
-- You need fine-grained control over the sync process
+```toml
+[credentials]
+env = "GSLM_CREDENTIALS_JSON"
+```
 
-## Files
+然後將完整 JSON 放在未提交的 `.env`（可參考 `.env.example`）。JSON 必須是
+單行且**加上引號**，否則 `.env` 無法解析：
 
-- `gslm.config.js` - CLI configuration file
-- `config.ts` - Programmatic API configuration
-- `pull.ts` - Programmatic pull example
-- `push.ts` - Programmatic push example
-- `credentials.json` - Google Service Account credentials (not in repo)
-- `.env` - Environment variables (not in repo)
-- `.env.example` - Example environment variables
-- `i18n/` - Translation files directory
+```dotenv
+GSLM_CREDENTIALS_JSON='{"type":"service_account","private_key":"-----BEGIN PRIVATE KEY-----\n...","client_email":"..."}'
+```
 
-## Learn More
-
-- [Main Documentation](../README.md)
-- [CLI Usage](../README.md#cli-usage)
-- [Programmatic API Usage](../README.md#programmatic-api-usage)
+`.env` 只在缺少同名環境變數時生效 —— 真實環境變數與 CLI 旗標都優先於它。
+用 `--no-dotenv` 可完全停用 `.env`。

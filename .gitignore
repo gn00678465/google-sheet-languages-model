@@ -1,9 +1,19 @@
 node_modules
 dist
 **/credentials.json
+# WSL/Windows 為下載檔產生的 alternate data stream
+*:Zone.Identifier
 *.log
 **/.env
 tmp
 
 # Release artifacts
 .release-it.json
+
+# Rust
+target/
+artifacts/
+
+# Coverage and mutation-testing artifacts (cargo-llvm-cov, cargo-mutants)
+*.profraw
+mutants.out/

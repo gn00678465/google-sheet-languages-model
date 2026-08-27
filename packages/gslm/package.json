@@ -1,0 +1,62 @@
+{
+  "name": "@gn00678465/google-sheet-languages-model",
+  "version": "1.0.0-beta.1",
+  "description": "Sync i18n catalogs between Google Sheets and local JSON files (Rust core, napi-rs binding)",
+  "keywords": [
+    "i18n",
+    "google-sheet",
+    "napi-rs",
+    "cli"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gn00678465/google-sheet-languages-model.git",
+    "directory": "packages/gslm"
+  },
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": {
+    "gslm": "bin/gslm.js"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "migrate.js",
+    "binding.js",
+    "binding.d.ts",
+    "bin/"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "napi build --platform --release --js binding.js --dts binding.d.ts",
+    "build:debug": "napi build --platform --js binding.js --dts binding.d.ts",
+    "artifacts": "napi artifacts -d ../../artifacts",
+    "create-npm-dirs": "napi create-npm-dirs",
+    "version": "napi version",
+    "test": "node --test __tests__/flatten.test.cjs __tests__/conversions.test.cjs __tests__/sheets.test.cjs __tests__/config.test.cjs __tests__/migrate.test.cjs __tests__/cli.test.cjs __tests__/cli-security.test.cjs __tests__/cli-signal.test.cjs __tests__/target-lifetime.test.cjs __tests__/esm-exports.test.cjs",
+    "typecheck": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target ES2022 index.d.ts __tests__/types/public-api.ts && tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2022 index.d.ts __tests__/types/public-api.ts"
+  },
+  "napi": {
+    "binaryName": "gslm",
+    "targets": [
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-musl"
+    ]
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.8.0",
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,21 @@
+[package]
+name = "gslm-config"
+description = "Configuration loading for gslm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+gslm-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+json5 = { workspace = true }
+schemars = { workspace = true }
+dotenvy = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+jsonschema = { workspace = true }

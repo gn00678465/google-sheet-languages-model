@@ -1,0 +1,8 @@
+# crates/gslm-sheets/tests/fixtures/service-account.json
+# 測試用的拋棄式 RSA 私鑰，不對應任何 Google service account。
+# gcp_auth 在建構 service-account provider 時會解析 PEM，因此 fixture 必須是
+# 一把結構合法的金鑰；auth.rs 的三個測試只驗證欄位驗證與 email 抽取，不換 token。
+# 佐證：project_id=proj / private_key_id=abc / client_id=1 皆為佔位值，且缺少
+# Google 下發金鑰必有的 auth_uri 等欄位 —— 此金鑰從未註冊到任何雲端主體。
+# 本行僅抑制這一筆 fingerprint（commit+檔案+規則+行號）；換一把金鑰即重新告警。
+a80a64853fed69af3809b6640ca5154840f4016f:crates/gslm-sheets/tests/fixtures/service-account.json:private-key:5

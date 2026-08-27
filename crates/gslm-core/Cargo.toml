@@ -1,0 +1,12 @@
+[package]
+name = "gslm-core"
+description = "Core logic for gslm: sync i18n catalogs between Google Sheets and local files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+thiserror = { workspace = true }

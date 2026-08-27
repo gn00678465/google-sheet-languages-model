@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RawConfig",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "$schema": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sheet": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tab": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "locales": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "path": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": ".*\\{locale\\}.*"
+    },
+    "format": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RawFormat"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "key_separator": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "credentials": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RawCredentials"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "targets": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/RawTarget"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "$defs": {
+    "RawFormat": {
+      "type": "string",
+      "enum": [
+        "nest",
+        "flat"
+      ]
+    },
+    "RawCredentials": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RawCredentialsFile"
+        },
+        {
+          "$ref": "#/$defs/RawCredentialsEnv"
+        }
+      ]
+    },
+    "RawCredentialsFile": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "file"
+      ]
+    },
+    "RawCredentialsEnv": {
+      "type": "object",
+      "properties": {
+        "env": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "env"
+      ]
+    },
+    "RawTarget": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "sheet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tab": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "locales": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": ".*\\{locale\\}.*"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RawFormat"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key_separator": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "credentials": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RawCredentials"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/gn00678465/google-sheet-languages-model/main/docs/schema/v1.json"
+}

@@ -1,0 +1,139 @@
+// End-to-end coverage for bin → index.js → napi → gslm-cli. The fixture is a
+// normal node:http server, so argv and exit codes run through the real bridge.
+const { after, before, describe, it } = require('node:test')
+const assert = require('node:assert/strict')
+const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+const { join } = require('node:path')
+const { spawn } = require('node:child_process')
+const http = require('node:http')
+const { loadConfig, pull, push, runCli } = require('../index.js')
+
+let server
+let baseUrl
+let requests = []
+
+before(async () => {
+  server = http.createServer((req, res) => {
+    let body = ''
+    req.on('data', (chunk) => (body += chunk))
+    req.on('end', () => {
+      requests.push({ method: req.method, url: req.url, body })
+      res.writeHead(200, { 'content-type': 'application/json' })
+      if (req.method === 'GET') {
+        res.end(JSON.stringify({ values: [['key', 'en', 'zh-TW'], ['app.title', 'Title', '標題']] }))
+      } else {
+        res.end(JSON.stringify({}))
+      }
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  baseUrl = `http://127.0.0.1:${server.address().port}`
+})
+
+after(() => server.close())
+
+function makeProject() {
+  return mkdtempSync(join(tmpdir(), 'gslm-cli-'))
+}
+
+function config() {
+  return 'version = 1\nsheet = "sheet-id"\ntab = "i18n"\nlocales = ["en", "zh-TW"]\npath = "locales/{locale}.json"\nformat = "nest"\n'
+}
+
+function bin(cwd, ...args) {
+  return new Promise((resolve, reject) => {
+    const env = { ...process.env }
+    delete env.GSLM_CLI_BASE_URL
+    delete env.GSLM_CLI_ACCESS_TOKEN
+    const child = spawn(process.execPath, [join(__dirname, '..', 'bin', 'gslm.js'), ...args], {
+      cwd,
+      env,
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => (stdout += chunk))
+    child.stderr.on('data', (chunk) => (stderr += chunk))
+    child.once('error', reject)
+    child.once('close', (status) => resolve({ status, stdout, stderr }))
+  })
+}
+
+describe('gslm bin CLI', () => {
+  it('forwards init and help to the native CLI without test environment hooks', async () => {
+    const cwd = makeProject()
+    try {
+      const initialized = await bin(cwd, 'init')
+      assert.equal(initialized.status, 0, initialized.stderr)
+      const help = await bin(cwd, '--help')
+      assert.equal(help.status, 0, help.stderr)
+      assert.match(help.stdout, /用法：gslm /)
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+
+  it('runs pull and push through runCli explicit test options', async () => {
+    const cwd = makeProject()
+    try {
+      assert.equal(await runCli(['gslm', 'init'], { cwd }), 0)
+      writeFileSync(join(cwd, 'gslm.toml'), config())
+      requests = []
+      assert.equal(await runCli(['gslm', 'pull'], { cwd, baseUrl, accessToken: 'fixture-token' }), 0)
+      assert.match(readFileSync(join(cwd, 'locales/en.json'), 'utf8'), /"app"/)
+      assert.deepEqual(requests.map((request) => request.method), ['GET'])
+
+      requests = []
+      assert.equal(await runCli(['gslm', 'push'], { cwd, baseUrl, accessToken: 'fixture-token' }), 0)
+      assert.deepEqual(requests.map((request) => request.method), ['POST', 'PUT'])
+      assert.deepEqual(JSON.parse(requests[1].body).values, [
+        ['key', 'en', 'zh-TW'],
+        ['app.title', 'Title', '標題'],
+      ])
+
+      const target = loadConfig({ cwd, env: {} }).targets[0]
+      requests = []
+      const summary = await pull(target, { baseUrl, accessToken: 'fixture-token' })
+      assert.equal(summary.created, 0)
+      assert.equal(summary.unchanged, 2)
+      assert.deepEqual(requests.map((request) => request.method), ['GET'])
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+
+  it('maps the high-level push summary and honours dry-run without touching the server', async () => {
+    const cwd = makeProject()
+    try {
+      writeFileSync(join(cwd, 'gslm.toml'), config())
+      mkdirSync(join(cwd, 'locales'))
+      writeFileSync(join(cwd, 'locales/en.json'), '{"app":{"title":"Title"}}\n')
+      writeFileSync(join(cwd, 'locales/zh-TW.json'), '{"app":{"title":"標題"}}\n')
+      const target = loadConfig({ cwd, env: {} }).targets[0]
+
+      requests = []
+      const preview = await push(target, { dryRun: true, baseUrl, accessToken: 'fixture-token' })
+      assert.deepEqual(requests, [])
+      assert.equal(preview.target, 'default')
+      assert.equal(preview.rows, 2)
+      assert.equal(preview.columns, 3)
+      assert.deepEqual(preview.localeKeys, [
+        { locale: 'en', keys: 1 },
+        { locale: 'zh-TW', keys: 1 },
+      ])
+      assert.deepEqual(preview.orphanKeys, [])
+      assert.deepEqual(preview.warnings, [])
+
+      requests = []
+      const written = await push(target, { baseUrl, accessToken: 'fixture-token' })
+      assert.equal(written.rows, 2)
+      assert.deepEqual(requests.map((request) => request.method), ['POST', 'PUT'])
+      assert.deepEqual(JSON.parse(requests[1].body).values, [
+        ['key', 'en', 'zh-TW'],
+        ['app.title', 'Title', '標題'],
+      ])
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+})

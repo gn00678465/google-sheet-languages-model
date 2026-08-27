@@ -1,0 +1,24 @@
+[package]
+name = "gslm-sheets"
+description = "Google Sheets client for gslm: read/write a Tab with service-account auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+gslm-core = { workspace = true }
+reqwest = { workspace = true }
+rustls = { workspace = true }
+gcp_auth = { workspace = true }
+tokio = { workspace = true }
+webpki-roots = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+percent-encoding = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+wiremock = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

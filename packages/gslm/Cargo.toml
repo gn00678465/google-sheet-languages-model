@@ -1,0 +1,25 @@
+[package]
+name = "gslm-napi"
+description = "Node.js binding for gslm-core (napi-rs)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+gslm-core = { workspace = true }
+gslm-config = { workspace = true }
+gslm-cli = { workspace = true }
+gslm-sheets = { workspace = true }
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+napi = { workspace = true }
+napi-derive = { workspace = true }
+getrandom = { workspace = true }
+
+[build-dependencies]
+napi-build = { workspace = true }

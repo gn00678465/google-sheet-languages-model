@@ -1,0 +1,14 @@
+#:schema https://raw.githubusercontent.com/gn00678465/google-sheet-languages-model/main/docs/schema/v1.json
+# 範例設定。第一個 Locale 是來源語言，並決定 Sheet 的 key 順序。
+version = 1
+sheet = "YOUR_GOOGLE_SHEET_ID"
+tab = "i18n-demo"
+locales = ["en", "zh", "ja", "fr", "es"]
+path = "i18n/{locale}.json"
+format = "nest"
+key_separator = "."
+
+# 可改成 `env = "GSLM_CREDENTIALS_JSON"`，將完整 service-account JSON
+# 放在未提交的 .env 或 CI secret。
+[credentials]
+file = "./credentials.json"

@@ -1,26 +1,17 @@
 import { defineConfig } from 'bumpp'
 
+// Releases now target the napi package (packages/gslm). The tag prefix
+// `napi-v` drives .github/workflows/napi.yml; the legacy `v*` flow is retired.
 export default defineConfig({
-  // Files to update version in
-  files: [
-    'package.json',
-    'deno.json',
-  ],
-
-  // Commit settings
-  commit: 'chore(release): bump version to v%s',
-  tag: 'v%s',
+  files: ['packages/gslm/package.json'],
+  commit: 'chore(release): napi-v%s',
+  tag: 'napi-v%s',
   push: true,
-
-  // Confirmation prompt
   confirm: true,
-
-  // Execute changelog generation before committing
-  execute: 'pnpm run changelog',
-
-  // Don't create a release on GitHub (we'll do this via Actions)
-  release: false,
-
-  // Conventional commits support
+  // `all: true` commits whatever else is in the tree along with the version
+  // bump — the changelog `execute` writes needs it. It also makes bumpp skip
+  // its working-tree check, so only release from a clean tree.
   all: true,
+  execute: 'pnpm run changelog',
+  release: false,
 })
