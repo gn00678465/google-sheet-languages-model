@@ -5,9 +5,10 @@ name: napi
 #   push to main/refactor/** or PR → lint + build + test + publish (dry-run)
 #   push tag napi-v<version>      → lint + build + test + publish + verify-install
 #                                   + GitHub Release
-#   workflow_dispatch             → verify-install only, against an already
-#                                   published version (a release cannot be
-#                                   republished, so re-verifying needs its own door)
+#   workflow_dispatch             → verify-install + GitHub Release, against an
+#                                   already published version (a release cannot
+#                                   be republished, so re-verifying and
+#                                   rebuilding its Release need their own door)
 
 on:
   workflow_dispatch:
@@ -340,31 +341,45 @@ jobs:
   # The pre-rewrite publish.yml ended with a softprops/action-gh-release step;
   # the napi pipeline that replaced it dropped that step, so tags stopped
   # reaching the Releases page. Gated on verify-install: a Release should only
-  # announce a build that actually installs on every platform.
+  # announce a build that actually installs on every platform. workflow_dispatch
+  # reaches this job the same way it reaches verify-install, so a Release can be
+  # built or rebuilt for a version that is already published.
   github-release:
     needs: [publish, verify-install, verify-install-musl]
-    if: needs.publish.outputs.is-release == 'true'
+    if: >-
+      always()
+      && (github.event_name == 'workflow_dispatch' || needs.publish.outputs.is-release == 'true')
+      && needs.verify-install.result == 'success'
+      && needs.verify-install-musl.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Create the GitHub Release from this version's CHANGELOG section
+      - name: Create or update the Release from this version's CHANGELOG section
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          version="${{ needs.publish.outputs.version }}"
-          notes="$(awk -v v="$version" '
+          version="${{ inputs.version || needs.publish.outputs.version }}"
+          tag="napi-v$version"
+          awk -v v="$version" '
             $0 == "## " v || $0 == "## v" v { found = 1; next }
             found && /^## / { exit }
             found { print }
-          ' CHANGELOG.md)"
-          if [[ -z "${notes//[[:space:]]/}" ]]; then
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
             echo "::warning::no '## $version' section in CHANGELOG.md; falling back to a pointer"
-            notes="See CHANGELOG.md for the $version entry."
+            echo "See CHANGELOG.md for the $version entry." > notes.md
           fi
-          args=(--title "v$version" --notes "$notes")
           # A prerelease must not take over the Releases page as `Latest`.
-          if [[ "$version" == *-* ]]; then args+=(--prerelease); fi
-          gh release create "napi-v$version" "${args[@]}"
+          if [[ "$version" == *-* ]]; then pre=true; else pre=false; fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "updating existing release $tag"
+            gh release edit "$tag" --title "v$version" --notes-file notes.md --prerelease="$pre"
+          else
+            # --verify-tag stops a mistyped dispatch input from inventing a tag:
+            # `gh release create` would otherwise create it at the checked-out commit.
+            echo "creating release $tag"
+            gh release create "$tag" --verify-tag --title "v$version" --notes-file notes.md --prerelease="$pre"
+          fi
