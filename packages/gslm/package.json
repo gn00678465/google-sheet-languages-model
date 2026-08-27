@@ -1,6 +1,6 @@
 {
   "name": "@gn00678465/google-sheet-languages-model",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0",
   "description": "Sync i18n catalogs between Google Sheets and local JSON files (Rust core, napi-rs binding)",
   "keywords": [
     "i18n",
